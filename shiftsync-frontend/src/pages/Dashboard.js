@@ -7,7 +7,8 @@ import {
   Card,
   CardContent,
   Avatar,
-  Chip
+  Chip,
+  Button 
 } from '@mui/material';
 import {
   Event as EventIcon,

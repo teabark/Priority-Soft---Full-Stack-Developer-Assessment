@@ -18,13 +18,13 @@ export const AuthProvider = ({ children }) => {
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   }
 
-  useEffect(() => {
-    if (token) {
-      loadUser();
-    } else {
-      setLoading(false);
-    }
-  }, [token]);
+useEffect(() => {
+  if (token) {
+    loadUser();
+  } else {
+    setLoading(false);
+  }
+}, [token, loadUser]); 
 
   const loadUser = async () => {
     try {
