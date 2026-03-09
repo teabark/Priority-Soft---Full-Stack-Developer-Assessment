@@ -442,13 +442,13 @@ locationSchema.statics.getLocationsWithStaff = function() {
 };
 
 // Indexes for performance
-locationSchema.index({ code: 1 });
-locationSchema.index({ timezone: 1 });
-locationSchema.index({ 'staff.user': 1, 'staff.isActive': 1 });
-locationSchema.index({ managers: 1 });
-locationSchema.index({ status: 1 });
-locationSchema.index({ 'address.zipCode': 1 });
-locationSchema.index({ 'address.city': 1, 'address.state': 1 });
+// locationSchema.index({ code: 1 });
+// locationSchema.index({ timezone: 1 });
+// locationSchema.index({ 'staff.user': 1, 'staff.isActive': 1 });
+// locationSchema.index({ managers: 1 });
+// locationSchema.index({ status: 1 });
+// locationSchema.index({ 'address.zipCode': 1 });
+// locationSchema.index({ 'address.city': 1, 'address.state': 1 });
 
 const Location = mongoose.model('Location', locationSchema);
 

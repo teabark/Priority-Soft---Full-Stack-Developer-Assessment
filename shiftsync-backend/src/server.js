@@ -58,11 +58,11 @@ app.use('/api/schedules', scheduleRoutes);
 app.use('/api/swaps', swapRoutes);
 app.use('/api/notifications', notificationRoutes);
 
-// 404 handler
-app.use('*', (req, res) => {
+// 404 handler - fix the wildcard syntax
+app.use((req, res) => {
   res.status(404).json({ 
     success: false, 
-    message: 'Route not found' 
+    message: `Route ${req.method} ${req.originalUrl} not found` 
   });
 });
 
