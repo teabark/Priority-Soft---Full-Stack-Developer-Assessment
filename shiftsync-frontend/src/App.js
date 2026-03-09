@@ -30,9 +30,9 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AuthProvider>
-        <SocketProvider>
-          <Router>
+      <Router>  {/* Router must be at the top level */}
+        <AuthProvider>  {/* AuthProvider now has access to Router context */}
+          <SocketProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
@@ -42,10 +42,10 @@ function App() {
               <Route path="/staff" element={<PrivateRoute><Staff /></PrivateRoute>} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
-          </Router>
-          <ToastContainer position="top-right" autoClose={3000} />
-        </SocketProvider>
-      </AuthProvider>
+          </SocketProvider>
+        </AuthProvider>
+      </Router>
+      <ToastContainer position="top-right" autoClose={3000} />
     </ThemeProvider>
   );
 }

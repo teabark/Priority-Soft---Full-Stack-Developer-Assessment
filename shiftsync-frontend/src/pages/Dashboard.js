@@ -8,7 +8,7 @@ import {
   CardContent,
   Avatar,
   Chip,
-  Button 
+  Button
 } from '@mui/material';
 import {
   Event as EventIcon,
@@ -22,14 +22,31 @@ import Layout from '../components/layout/Layout';
 import axios from 'axios';
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { user: contextUser } = useAuth();
   const { onlineUsers } = useSocket();
+  const [user, setUser] = useState(contextUser);
   const [stats, setStats] = useState({
     shifts: 0,
     locations: 0,
     staff: 0,
     pendingSwaps: 0
   });
+
+  useEffect(() => {
+    // If context doesn't have user but localStorage does, use that
+    if (!contextUser) {
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch (e) {
+          console.error('Error parsing user:', e);
+        }
+      }
+    } else {
+      setUser(contextUser);
+    }
+  }, [contextUser]);
 
   useEffect(() => {
     fetchStats();
@@ -44,10 +61,10 @@ const Dashboard = () => {
       ]);
 
       setStats({
-        shifts: shiftsRes.data.count,
-        locations: locationsRes.data.count,
-        staff: usersRes.data.count,
-        pendingSwaps: 3 // This would come from a real endpoint
+        shifts: shiftsRes.data.count || 0,
+        locations: locationsRes.data.count || 0,
+        staff: usersRes.data.count || 0,
+        pendingSwaps: 3
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -78,7 +95,7 @@ const Dashboard = () => {
     <Layout>
       <Box mb={4}>
         <Typography variant="h4" gutterBottom>
-          Welcome back, {user?.name}!
+          Welcome back, {user?.name || 'User'}!
         </Typography>
         <Typography variant="body1" color="textSecondary">
           {user?.role === 'admin' && 'You have full system access'}
@@ -127,13 +144,13 @@ const Dashboard = () => {
             <Typography variant="h6" gutterBottom>
               Online Staff
             </Typography>
-            {onlineUsers.length > 0 ? (
+            {onlineUsers && onlineUsers.length > 0 ? (
               <Box display="flex" flexWrap="wrap" gap={1}>
                 {onlineUsers.map((u) => (
                   <Chip
                     key={u.id}
                     label={u.name}
-                    avatar={<Avatar>{u.name[0]}</Avatar>}
+                    avatar={<Avatar>{u.name?.[0] || 'U'}</Avatar>}
                     color="success"
                     variant="outlined"
                   />
@@ -153,23 +170,23 @@ const Dashboard = () => {
             </Typography>
             <Grid container spacing={2}>
               <Grid item xs={6}>
-                <Button variant="outlined" fullWidth>
-                  View Schedule
-                </Button>
-              </Grid>
-              <Grid item xs={6}>
-                <Button variant="outlined" fullWidth>
-                  Request Swap
-                </Button>
-              </Grid>
-              <Grid item xs={6}>
-                <Button variant="outlined" fullWidth>
+                <Button variant="outlined" fullWidth href="/shifts">
                   View Shifts
                 </Button>
               </Grid>
               <Grid item xs={6}>
-                <Button variant="outlined" fullWidth>
-                  Contact Manager
+                <Button variant="outlined" fullWidth href="/schedule">
+                  View Schedule
+                </Button>
+              </Grid>
+              <Grid item xs={6}>
+                <Button variant="outlined" fullWidth href="/locations">
+                  Locations
+                </Button>
+              </Grid>
+              <Grid item xs={6}>
+                <Button variant="outlined" fullWidth href="/staff">
+                  Staff
                 </Button>
               </Grid>
             </Grid>

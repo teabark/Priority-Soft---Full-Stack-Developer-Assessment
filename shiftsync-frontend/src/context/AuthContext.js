@@ -1,7 +1,13 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
+import React, {
+  createContext,
+  useState,
+  useContext,
+  useEffect,
+  useCallback,
+} from "react";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 
 const AuthContext = createContext();
 
@@ -10,65 +16,107 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(localStorage.getItem("token"));
   const navigate = useNavigate();
 
   // Set axios default header
   if (token) {
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
   }
 
-useEffect(() => {
-  if (token) {
-    loadUser();
-  } else {
-    setLoading(false);
-  }
-}, [token, loadUser]); 
+  const logout = useCallback(() => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    delete axios.defaults.headers.common["Authorization"];
+    setToken(null);
+    setUser(null);
+    navigate("/login");
+    toast.info("Logged out successfully");
+  }, [navigate]);
 
-  const loadUser = async () => {
+  const loadUser = useCallback(async () => {
     try {
       const res = await axios.get(`${process.env.REACT_APP_API_URL}/auth/me`);
       setUser(res.data.data);
+      localStorage.setItem("user", JSON.stringify(res.data.data));
     } catch (error) {
-      console.error('Load user error:', error);
+      console.error("Load user error:", error);
       logout();
     } finally {
       setLoading(false);
     }
-  };
+  }, [logout]);
+
+  useEffect(() => {
+    if (token) {
+      loadUser();
+    } else {
+      setLoading(false);
+    }
+  }, [token, loadUser]);
+
+  // Try to get user from localStorage on initial load if context doesn't have it
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser && !user) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error('Error parsing stored user:', e);
+      }
+    }
+  }, [user]);
 
   const login = async (email, password) => {
     try {
+      console.log('🔍 Login attempt starting...');
+      
       const res = await axios.post(`${process.env.REACT_APP_API_URL}/auth/login`, {
         email,
         password
       });
-
+      
+      console.log('✅ Login successful, response:', res.data);
+      
       const { token, user } = res.data;
       
+      // Save to localStorage
       localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      console.log('💾 Token and user saved to localStorage');
+      
+      // Set axios default header
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      console.log('🔑 Axios header set');
+      
+      // Update state
       setToken(token);
       setUser(user);
+      console.log('🔄 State updated with user:', user.name);
       
+      // Show success message
       toast.success(`Welcome back, ${user.name}!`);
+      console.log('📢 Toast notification shown');
+      
+      // Try React Router navigate first
+      console.log('➡️ Attempting React Router navigation to /');
       navigate('/');
+      
+      // Fallback: Force redirect after a short delay if React Router fails
+      setTimeout(() => {
+        if (window.location.pathname !== '/') {
+          console.log('⚠️ React Router navigation failed, forcing redirect');
+          window.location.href = '/';
+        }
+      }, 500);
+      
       return { success: true };
     } catch (error) {
+      console.error('❌ Login error:', error);
       const message = error.response?.data?.message || 'Login failed';
       toast.error(message);
       return { success: false, message };
     }
-  };
-
-  const logout = () => {
-    localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
-    setToken(null);
-    setUser(null);
-    navigate('/login');
-    toast.info('Logged out successfully');
   };
 
   const value = {
@@ -76,7 +124,7 @@ useEffect(() => {
     loading,
     login,
     logout,
-    isAuthenticated: !!user,
+    isAuthenticated: !!user || !!localStorage.getItem('token'),
     isAdmin: user?.role === 'admin',
     isManager: user?.role === 'manager',
     isStaff: user?.role === 'staff'
