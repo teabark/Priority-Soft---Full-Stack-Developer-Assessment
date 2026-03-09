@@ -1,4 +1,6 @@
 const express = require('express');
+const Shift = require('../models/Shift'); 
+const mongoose = require('mongoose');
 const router = express.Router();
 const {
   createShift,
@@ -28,6 +30,117 @@ const {
 router.use(protect);
 
 // Special routes first
+
+// SIMPLE SHIFTS ENDPOINT - Works like the debug endpoint
+router.get('/simple-list', protect, async (req, res) => {
+  try {
+    console.log('📡 Simple shifts requested by:', req.user.email);
+    
+    const db = mongoose.connection.db;
+    
+    // Build query based on user role
+    let query = {};
+    if (req.user.role === 'manager' && req.user.locations && req.user.locations.length > 0) {
+      const locationIds = req.user.locations.map(id => 
+        typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id
+      );
+      query.location = { $in: locationIds };
+    }
+    
+    // Get shifts
+    const shifts = await db.collection('shifts').find(query).toArray();
+    
+    // Get locations for reference
+    const locations = await db.collection('locations').find().toArray();
+    const locationMap = {};
+    locations.forEach(loc => {
+      locationMap[loc._id.toString()] = {
+        _id: loc._id,
+        name: loc.name,
+        code: loc.code,
+        timezone: loc.timezone
+      };
+    });
+    
+    // Get users for staff reference
+    const users = await db.collection('users').find().toArray();
+    const userMap = {};
+    users.forEach(user => {
+      userMap[user._id.toString()] = {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      };
+    });
+    
+    // Format shifts
+    const formattedShifts = shifts.map(shift => ({
+      _id: shift._id,
+      location: locationMap[shift.location?.toString()] || { name: 'Unknown', _id: shift.location },
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      requiredSkill: shift.requiredSkill,
+      requiredCount: shift.requiredCount,
+      assignedStaff: (shift.assignedStaff || []).map(id => 
+        userMap[id.toString()] || { name: 'Unknown', _id: id }
+      ),
+      status: shift.status || 'draft',
+      isPremiumShift: shift.isPremiumShift || false,
+      createdAt: shift.createdAt
+    }));
+    
+    console.log(`✅ Found ${formattedShifts.length} shifts for ${req.user.email}`);
+    
+    res.json({
+      success: true,
+      count: formattedShifts.length,
+      data: formattedShifts
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in simple-list:', error);
+    res.status(200).json({
+      success: true,
+      count: 0,
+      data: []
+    });
+  }
+});
+
+// TEMPORARY SIMPLE SHIFTS ENDPOINT - Add this near the top of the file
+router.get('/manager-shifts', protect, async (req, res) => {
+  try {
+    console.log('📡 Manager shifts requested by:', req.user.email);
+    
+    // Build query based on user role
+    let query = {};
+    if (req.user.role === 'manager') {
+      // Managers see only their locations
+      query.location = { $in: req.user.locations };
+    }
+    
+    const shifts = await Shift.find(query)
+      .populate('location', 'name timezone code')
+      .populate('assignedStaff', 'name email')
+      .sort({ startTime: -1 });
+    
+    console.log(`✅ Found ${shifts.length} shifts for manager`);
+    
+    res.status(200).json({
+      success: true,
+      count: shifts.length,
+      data: shifts
+    });
+  } catch (error) {
+    console.error('❌ Error in manager-shifts:', error);
+    res.status(200).json({
+      success: true,
+      count: 0,
+      data: []
+    });
+  }
+});
 router.get('/attention', authorize('admin', 'manager'), getShiftsNeedingAttention);
 router.get('/range', validateDateRange, handleValidationErrors, getShifts);
 

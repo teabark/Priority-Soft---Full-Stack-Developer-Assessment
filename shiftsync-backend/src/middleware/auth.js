@@ -7,20 +7,25 @@ const protect = async (req, res, next) => {
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
       token = req.headers.authorization.split(' ')[1];
+      console.log('🔑 Token received:', token ? 'Yes' : 'No');
+      
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      console.log('📝 Decoded token:', decoded);
       
       req.user = await User.findById(decoded.id).select('-password');
       
       if (!req.user) {
+        console.log('❌ User not found for ID:', decoded.id);
         return res.status(401).json({ 
           success: false, 
           message: 'User not found' 
         });
       }
 
+      console.log('✅ User authenticated:', req.user.email, 'Role:', req.user.role);
       next();
     } catch (error) {
-      console.error('Auth error:', error);
+      console.error('❌ Auth error:', error.message);
       return res.status(401).json({ 
         success: false, 
         message: 'Not authorized' 
@@ -29,6 +34,7 @@ const protect = async (req, res, next) => {
   }
 
   if (!token) {
+    console.log('❌ No token provided');
     return res.status(401).json({ 
       success: false, 
       message: 'Not authorized, no token' 

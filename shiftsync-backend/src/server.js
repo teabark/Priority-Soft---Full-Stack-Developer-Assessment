@@ -50,6 +50,98 @@ app.get('/socket-status', (req, res) => {
 });
 
 // Use routes
+// SUPER SIMPLE DEBUG ENDPOINT - NO AUTH, NO MODELS, JUST RAW DATA
+app.get('/api/debug/all-shifts', async (req, res) => {
+  try {
+    console.log('🔍 Debug: Fetching all shifts directly from MongoDB...');
+    
+    const db = mongoose.connection.db;
+    if (!db) {
+      return res.status(500).json({ error: 'Database not connected' });
+    }
+    
+    // Get all collections
+    const shifts = await db.collection('shifts').find().toArray();
+    const locations = await db.collection('locations').find().toArray();
+    const users = await db.collection('users').find().toArray();
+    
+    console.log(`📊 Found ${shifts.length} shifts, ${locations.length} locations, ${users.length} users`);
+    
+    // Create lookup maps
+    const locationMap = {};
+    locations.forEach(loc => {
+      locationMap[loc._id.toString()] = {
+        name: loc.name,
+        code: loc.code,
+        timezone: loc.timezone,
+        address: loc.address
+      };
+    });
+    
+    const userMap = {};
+    users.forEach(user => {
+      userMap[user._id.toString()] = {
+        name: user.name,
+        email: user.email,
+        role: user.role
+      };
+    });
+    
+    // Format shifts with populated data
+    const formattedShifts = shifts.map(shift => ({
+      _id: shift._id,
+      location: locationMap[shift.location?.toString()] || { name: 'Unknown Location' },
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      requiredSkill: shift.requiredSkill,
+      requiredCount: shift.requiredCount,
+      assignedStaff: (shift.assignedStaff || []).map(id => 
+        userMap[id.toString()] || { name: 'Unknown Staff' }
+      ),
+      status: shift.status || 'draft',
+      isPremiumShift: shift.isPremiumShift || false,
+      createdAt: shift.createdAt
+    }));
+    
+    res.json({
+      success: true,
+      count: formattedShifts.length,
+      data: formattedShifts,
+      debug: {
+        shiftsCount: shifts.length,
+        locationsCount: locations.length,
+        usersCount: users.length
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Debug endpoint error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      stack: error.stack 
+    });
+  }
+});
+
+// TEMPORARY PUBLIC ENDPOINT - NO AUTH REQUIRED
+app.get('/api/public/shifts', async (req, res) => {
+  try {
+    const db = mongoose.connection.db;
+    const shifts = await db.collection('shifts').find().toArray();
+    
+    console.log(`📊 Public endpoint: Found ${shifts.length} shifts`);
+    
+    res.json({
+      success: true,
+      count: shifts.length,
+      data: shifts
+    });
+  } catch (error) {
+    console.error('Public endpoint error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/locations', locationRoutes);
@@ -66,6 +158,67 @@ app.use((req, res) => {
   });
 });
 
+// TEMPORARY - Simple shifts endpoint for managers
+app.get('/api/manager-shifts', async (req,res) => {
+  try {
+    // Get token from header
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'No token' });
+    }
+
+    // Decode token to get user ID
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Get user from database
+    const db = mongoose.connection.db;
+    const user = await db.collection('users').findOne({ _id: new mongoose.Types.ObjectId(decoded.id) });
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    console.log('👤 User:', user.email, 'Role:', user.role, 'Locations:', user.locations);
+
+    // Build query based on user role
+    let query = {};
+    if (user.role === 'manager') {
+      // Managers see only their locations
+      query.location = { $in: user.locations.map(id => new mongoose.Types.ObjectId(id)) };
+    }
+
+    // Get shifts
+    const shifts = await db.collection('shifts').find(query).toArray();
+    
+    // Populate location names
+    const locations = await db.collection('locations').find().toArray();
+    const locationMap = {};
+    locations.forEach(loc => { locationMap[loc._id.toString()] = loc; });
+
+    const shiftsWithDetails = shifts.map(shift => ({
+      ...shift,
+      location: locationMap[shift.location?.toString()] || { name: 'Unknown' }
+    }));
+
+    console.log(`📊 Found ${shifts.length} shifts for user`);
+
+    res.json({
+      success: true,
+      count: shifts.length,
+      data: shiftsWithDetails
+    });
+
+  } catch (error) {
+    console.error('❌ Error in manager-shifts:', error);
+    res.status(200).json({
+      success: true,
+      count: 0,
+      data: []
+    });
+  }
+});
+
 // Error handler middleware
 app.use(errorHandler);
 
@@ -77,6 +230,7 @@ server.listen(PORT, () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
 });
+
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
