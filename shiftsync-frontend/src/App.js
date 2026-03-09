@@ -30,16 +30,36 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Router>  {/* Router must be at the top level */}
-        <AuthProvider>  {/* AuthProvider now has access to Router context */}
+      <Router>
+        <AuthProvider>
           <SocketProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
-              <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-              <Route path="/shifts" element={<PrivateRoute><Shifts /></PrivateRoute>} />
-              <Route path="/schedule" element={<PrivateRoute><Schedule /></PrivateRoute>} />
-              <Route path="/locations" element={<PrivateRoute><Locations /></PrivateRoute>} />
-              <Route path="/staff" element={<PrivateRoute><Staff /></PrivateRoute>} />
+              <Route path="/" element={
+                <PrivateRoute>
+                  <Dashboard />
+                </PrivateRoute>
+              } />
+              <Route path="/shifts" element={
+                <PrivateRoute>
+                  <Shifts />
+                </PrivateRoute>
+              } />
+              <Route path="/schedule" element={
+                <PrivateRoute>
+                  <Schedule />
+                </PrivateRoute>
+              } />
+              <Route path="/locations" element={
+                <PrivateRoute>
+                  <Locations />
+                </PrivateRoute>
+              } />
+              <Route path="/staff" element={
+                <PrivateRoute>
+                  <Staff />
+                </PrivateRoute>
+              } />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </SocketProvider>
