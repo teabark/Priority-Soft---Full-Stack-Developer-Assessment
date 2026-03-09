@@ -1,0 +1,33 @@
+{
+    "name": "shiftsync-backend",
+    "version": "1.0.0",
+    "description": "Multi-location staff scheduling platform",
+    "main": "src/server.js",
+    "scripts": {
+        "start": "node src/server.js",
+        "dev": "nodemon src/server.js",
+        "seed": "node src/seed.js",
+        "test": "jest"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "bcryptjs": "^3.0.3",
+        "compression": "^1.8.1",
+        "cors": "^2.8.6",
+        "dotenv": "^17.3.1",
+        "express": "^5.2.1",
+        "express-validator": "^7.3.1",
+        "helmet": "^8.1.0",
+        "jsonwebtoken": "^9.0.3",
+        "moment-timezone": "^0.6.0",
+        "mongoose": "^9.2.4",
+        "socket.io": "^4.8.3"
+    },
+    "devDependencies": {
+        "jest": "^30.2.0",
+        "nodemon": "^3.1.14",
+        "supertest": "^7.2.2"
+    }
+}
