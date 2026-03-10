@@ -17,6 +17,7 @@ const server = http.createServer(app);
 const io = setupSocket(server);
 console.log('✅ Socket.io initialized');
 
+
 // Make io accessible to routes and controllers
 app.set('io', io);
 console.log('✅ io set in app');
@@ -35,7 +36,19 @@ const locationRoutes = require('./routes/location.routes');
 const shiftRoutes = require('./routes/shift.routes');
 const scheduleRoutes = require('./routes/schedule.routes');
 const swapRoutes = require('./routes/swap.routes');
+const overtimeRoutes = require('./routes/overtime.routes');
 const notificationRoutes = require('./routes/notification.routes');
+// After notification service initialization
+const OvertimeService = require('./services/overtime.service');
+const overtimeService = new OvertimeService(io);
+app.set('overtimeService', overtimeService);
+console.log('✅ OvertimeService initialized and attached to app');
+
+
+app.set('overtimeService', overtimeService);
+console.log('🔍 OvertimeService initialized. Available methods:', 
+  Object.getOwnPropertyNames(Object.getPrototypeOf(overtimeService)));
+console.log('🔍 getDashboardData exists:', typeof overtimeService.getDashboardData === 'function' ? '✅ YES' : '❌ NO');
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -158,6 +171,7 @@ app.use('/api/shifts', shiftRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/swaps', swapRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/overtime', overtimeRoutes);
 
 // 404 handler - fix the wildcard syntax
 app.use((req, res) => {

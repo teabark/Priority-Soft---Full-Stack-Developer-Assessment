@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const Notification = require('../models/Notification');
 const {
   getNotifications,
   getNotificationSummary,
@@ -33,6 +34,40 @@ router.put(
   handleValidationErrors,
   updatePreferences
 );
+
+// @desc    Get user notifications
+// @route   GET /api/notifications
+// @access  Private
+// router.get('/', protect, async (req, res) => {
+//   try {
+//     console.log('📡 Fetching notifications for user:', req.user.id);
+    
+//     const notifications = await Notification.find({ 
+//       recipient: req.user.id 
+//     })
+//     .sort({ createdAt: -1 })
+//     .limit(50);
+    
+//     const unreadCount = await Notification.countDocuments({
+//       recipient: req.user.id,
+//       read: false
+//     });
+    
+//     console.log(`✅ Found ${notifications.length} notifications, ${unreadCount} unread`);
+    
+//     res.json({
+//       success: true,
+//       data: notifications,
+//       unreadCount
+//     });
+//   } catch (error) {
+//     console.error('❌ Error fetching notifications:', error);
+//     res.status(500).json({ 
+//       success: false, 
+//       message: error.message 
+//     });
+//   }
+// });
 
 // Summary route
 router.get('/summary', getNotificationSummary);

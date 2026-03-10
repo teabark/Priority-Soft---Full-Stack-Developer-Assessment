@@ -1,66 +1,327 @@
 const express = require('express');
 const router = express.Router();
-const OvertimeService = require('../services/overtime.service');
+const mongoose = require('mongoose');
+const Shift = require('../models/Shift');
+const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
+const OvertimeService = require('../services/overtime.service');
 
-const overtimeService = new OvertimeService();
+// Initialize overtime service (will be set in server.js)
+let overtimeService;
 
-// @desc    Get overtime report for current user
-// @route   GET /api/overtime/me
-// @access  Private
-router.get('/me', protect, async (req, res) => {
+// Middleware to attach overtime service
+router.use((req, res, next) => {
+  if (!overtimeService) {
+    // Get from app if not already set
+    overtimeService = req.app.get('overtimeService');
+  }
+  next();
+});
+
+// @desc    Check overtime impact for a potential shift assignment
+// @route   POST /api/overtime/check-assignment
+// @access  Private (Managers, Admins)
+router.post('/check-assignment', protect, authorize('admin', 'manager'), async (req, res) => {
   try {
-    const { weekStart } = req.query;
-    const startDate = weekStart ? new Date(weekStart) : new Date();
+    const { shiftId, staffId } = req.body;
     
-    const report = await overtimeService.calculateWeeklyHours(req.user.id, startDate);
-    
+    console.log('🔍 Checking overtime impact:', { shiftId, staffId });
+
+    // Get the shift
+    const shift = await Shift.findById(shiftId).populate('location');
+    if (!shift) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Shift not found' 
+      });
+    }
+
+    // Get overtime service
+    const service = req.app.get('overtimeService') || overtimeService;
+    if (!service) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Overtime service not initialized' 
+      });
+    }
+
+    // Check the assignment
+    const result = await service.checkShiftAssignment(shift, staffId);
+
     res.json({
       success: true,
-      data: report
+      data: result
     });
+
   } catch (error) {
-    console.error('Error getting overtime report:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('❌ Error checking overtime:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 });
 
-// @desc    Get overtime report for a location (manager only)
-// @route   GET /api/overtime/location/:locationId
-// @access  Private/Manager
-router.get('/location/:locationId', protect, authorize('admin', 'manager'), async (req, res) => {
+// @desc    Get weekly hours for a specific staff member
+// @route   GET /api/overtime/staff/:staffId/weekly
+// @access  Private (Managers, Admins)
+router.get('/staff/:staffId/weekly', protect, authorize('admin', 'manager'), async (req, res) => {
   try {
-    const { weekStart } = req.query;
-    const startDate = weekStart ? new Date(weekStart) : new Date();
+    const { staffId } = req.params;
+    const { date } = req.query; // Optional date parameter
     
-    const report = await overtimeService.getLocationOvertimeReport(req.params.locationId, startDate);
-    
+    console.log('🔍 Getting weekly hours for staff:', staffId);
+
+    const service = req.app.get('overtimeService') || overtimeService;
+    if (!service) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Overtime service not initialized' 
+      });
+    }
+
+    const targetDate = date ? new Date(date) : new Date();
+    const weekly = await service.calculateWeeklyHours(staffId, targetDate);
+
+    // Get staff details
+    const staff = await User.findById(staffId).select('name email');
+
     res.json({
       success: true,
-      data: report
+      data: {
+        staff: staff,
+        weekStart: weekly.weekStart,
+        weekEnd: weekly.weekEnd,
+        weeklyHours: weekly.weeklyHours,
+        shiftCount: weekly.shifts.length,
+        shifts: weekly.shifts.map(s => ({
+          id: s._id,
+          date: s.startTime,
+          location: s.location,
+          hours: (s.duration || 0) / 60
+        }))
+      }
     });
+
   } catch (error) {
-    console.error('Error getting location overtime report:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('❌ Error getting weekly hours:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 });
 
-// @desc    Check shift impact before assignment
-// @route   POST /api/overtime/check-shift
-// @access  Private/Manager
-router.post('/check-shift', protect, authorize('admin', 'manager'), async (req, res) => {
+// @desc    Get daily hours for a specific staff member
+// @route   GET /api/overtime/staff/:staffId/daily
+// @access  Private (Managers, Admins)
+router.get('/staff/:staffId/daily', protect, authorize('admin', 'manager'), async (req, res) => {
   try {
-    const { shift, staffId } = req.body;
+    const { staffId } = req.params;
+    const { date } = req.query; // Optional date parameter
     
-    const impact = await overtimeService.checkShiftImpact(shift, staffId);
+    console.log('🔍 Getting daily hours for staff:', staffId);
+
+    const service = req.app.get('overtimeService') || overtimeService;
+    if (!service) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Overtime service not initialized' 
+      });
+    }
+
+    const targetDate = date ? new Date(date) : new Date();
+    const daily = await service.calculateDailyHours(staffId, targetDate);
+
+    // Get staff details
+    const staff = await User.findById(staffId).select('name email');
+
+    res.json({
+      success: true,
+      data: {
+        staff: staff,
+        date: daily.date,
+        dailyHours: daily.dailyHours,
+        shiftCount: daily.shifts.length,
+        shifts: daily.shifts.map(s => ({
+          id: s._id,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          location: s.location,
+          hours: (s.duration || 0) / 60
+        }))
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error getting daily hours:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+// @desc    Check consecutive days for a staff member
+// @route   GET /api/overtime/staff/:staffId/consecutive-days
+// @access  Private (Managers, Admins)
+router.get('/staff/:staffId/consecutive-days', protect, authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const { staffId } = req.params;
+    const { date } = req.query; // Optional date parameter
+    
+    console.log('🔍 Checking consecutive days for staff:', staffId);
+
+    const service = req.app.get('overtimeService') || overtimeService;
+    if (!service) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Overtime service not initialized' 
+      });
+    }
+
+    const targetDate = date ? new Date(date) : new Date();
+    const consecutive = await service.checkConsecutiveDays(staffId, targetDate);
+
+    // Get staff details
+    const staff = await User.findById(staffId).select('name email');
+
+    res.json({
+      success: true,
+      data: {
+        staff: staff,
+        consecutiveDays: consecutive.consecutiveDays,
+        dates: consecutive.dates,
+        warning: consecutive.consecutiveDays >= 6,
+        block: consecutive.consecutiveDays >= 7
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error checking consecutive days:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+// @desc    Get overtime dashboard for manager
+// @route   GET /api/overtime/dashboard
+// @access  Private (Managers, Admins)
+router.get('/dashboard', protect, authorize('admin', 'manager'), async (req, res) => {
+  try {
+    console.log('='.repeat(50));
+    console.log('🔍 DASHBOARD ROUTE HIT');
+    console.log('='.repeat(50));
+
+    const service = req.app.get('overtimeService');
+    
+    if (!service) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Overtime service not initialized' 
+      });
+    }
+
+    // Get location IDs based on role
+    let locationIds = [];
+    if (req.user.role === 'manager') {
+      locationIds = req.user.locations || [];
+    } else if (req.user.role === 'admin') {
+      const mongoose = require('mongoose');
+      const Location = mongoose.model('Location');
+      const locations = await Location.find();
+      locationIds = locations.map(l => l._id);
+    }
+    
+    console.log('📌 Location IDs:', locationIds);
+
+    // Use the existing method that actually exists
+    // Change this line from:
+    // const dashboardData = await service.getDashboardData(req.user.id, locationIds);
+    
+    // To this (use the method that exists):
+    const dashboardData = await service.getLocationOvertimeReport(req.user.id, locationIds);
     
     res.json({
       success: true,
-      data: impact
+      data: dashboardData
     });
+
   } catch (error) {
-    console.error('Error checking shift impact:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('❌ ERROR:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+// @desc    Override 7-day consecutive work block
+// @route   POST /api/overtime/override-consecutive
+// @access  Private (Managers, Admins)
+router.post('/override-consecutive', protect, authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const { staffId, shiftId, reason } = req.body;
+    
+    console.log('🔍 Override request for consecutive days:', { staffId, shiftId, reason });
+
+    if (!reason || reason.trim().length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'A detailed reason is required for override (minimum 10 characters)' 
+      });
+    }
+
+    // Find the shift
+    const shift = await Shift.findById(shiftId);
+    if (!shift) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Shift not found' 
+      });
+    }
+
+    // Add override to shift compliance history
+    if (!shift.complianceWarnings) shift.complianceWarnings = [];
+    shift.complianceWarnings.push({
+      type: 'consecutive_days',
+      severity: 'critical',
+      message: `7-day consecutive work override by ${req.user.name}`,
+      resolvedAt: new Date(),
+      resolvedBy: req.user.id,
+      notes: reason
+    });
+
+    shift.updatedBy = req.user.id;
+    await shift.save();
+
+    // Log the override
+    console.log('✅ Consecutive days override recorded:', {
+      staffId,
+      shiftId,
+      manager: req.user.id,
+      reason
+    });
+
+    res.json({
+      success: true,
+      message: 'Override recorded successfully',
+      data: {
+        shiftId,
+        overriddenBy: req.user.id,
+        reason,
+        timestamp: new Date()
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error processing override:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 });
 
