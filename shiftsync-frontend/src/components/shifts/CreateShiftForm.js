@@ -26,9 +26,9 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [fetchError, setFetchError] = useState("");
-  
+
   // Simple date inputs
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().split("T")[0];
   const [formData, setFormData] = useState({
     location: "",
     date: today,
@@ -41,7 +41,7 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
     assignedStaff: [],
     managerNotes: "",
   });
-  
+
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
@@ -51,7 +51,7 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
       console.log("🔍 Form opened");
       fetchLocations();
       fetchStaff();
-      
+
       // Reset form for new shift
       if (!editShift) {
         setFormData({
@@ -74,18 +74,18 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
   useEffect(() => {
     if (editShift && open) {
       console.log("📝 Editing shift:", editShift);
-      
+
       // Parse the existing shift times
       const startDate = new Date(editShift.startTime);
       const endDate = new Date(editShift.endTime);
-      
+
       setFormData({
         location: editShift.location?._id || editShift.location || "",
-        date: startDate.toISOString().split('T')[0],
-        startHour: String(startDate.getHours()).padStart(2, '0'),
-        startMinute: String(startDate.getMinutes()).padStart(2, '0'),
-        endHour: String(endDate.getHours()).padStart(2, '0'),
-        endMinute: String(endDate.getMinutes()).padStart(2, '0'),
+        date: startDate.toISOString().split("T")[0],
+        startHour: String(startDate.getHours()).padStart(2, "0"),
+        startMinute: String(startDate.getMinutes()).padStart(2, "0"),
+        endHour: String(endDate.getHours()).padStart(2, "0"),
+        endMinute: String(endDate.getMinutes()).padStart(2, "0"),
         requiredSkill: editShift.requiredSkill || "",
         requiredCount: editShift.requiredCount || 1,
         assignedStaff: editShift.assignedStaff?.map((s) => s._id || s) || [],
@@ -103,7 +103,7 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
         `${process.env.REACT_APP_API_URL}/locations`,
         {
           headers: { Authorization: `Bearer ${token}` },
-        }
+        },
       );
 
       if (res.data.data && res.data.data.length > 0) {
@@ -127,7 +127,8 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const staffMembers = res.data.data?.filter((u) => u.role === "staff") || [];
+      const staffMembers =
+        res.data.data?.filter((u) => u.role === "staff") || [];
       setStaff(staffMembers);
     } catch (error) {
       console.error("Error fetching staff:", error);
@@ -162,83 +163,96 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
 
     if (!formData.location) newErrors.location = "Location is required";
     if (!formData.date) newErrors.date = "Date is required";
-    if (!formData.requiredSkill) newErrors.requiredSkill = "Required skill is required";
-    if (formData.requiredCount < 1) newErrors.requiredCount = "At least 1 staff required";
+    if (!formData.requiredSkill)
+      newErrors.requiredSkill = "Required skill is required";
+    if (formData.requiredCount < 1)
+      newErrors.requiredCount = "At least 1 staff required";
 
     return newErrors;
   };
 
-  const handleSubmit = async () => {
-    const newErrors = validateForm();
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+const handleSubmit = async () => {
+  const newErrors = validateForm();
+  if (Object.keys(newErrors).length > 0) {
+    setErrors(newErrors);
+    return;
+  }
+
+  setLoading(true);
+  try {
+    // Get user ID from token
+    let userId = null;
+    const token = localStorage.getItem("token");
+    if (token) {
+      const base64Url = token.split(".")[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const payload = JSON.parse(window.atob(base64));
+      userId = payload.id;
+    }
+
+    if (!userId) {
+      setErrors({ submit: "User not authenticated. Please log in again." });
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
-    try {
-      // Get user ID from token
-      let userId = null;
-      const token = localStorage.getItem("token");
-      if (token) {
-        const base64Url = token.split(".")[1];
-        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-        const payload = JSON.parse(window.atob(base64));
-        userId = payload.id;
-      }
+    // Create date objects from the simplified form fields
+    const startDateTime = new Date(
+      `${formData.date}T${formData.startHour}:${formData.startMinute}:00`,
+    );
+    const endDateTime = new Date(
+      `${formData.date}T${formData.endHour}:${formData.endMinute}:00`,
+    );
 
-      if (!userId) {
-        setErrors({ submit: "User not authenticated. Please log in again." });
-        setLoading(false);
-        return;
-      }
+    // Format the date as YYYY-MM-DD for the database
+    const dateStr = formData.date; // This is already in YYYY-MM-DD format
 
-      // Create date objects
-      const startDateTime = new Date(`${formData.date}T${formData.startHour}:${formData.startMinute}:00`);
-      const endDateTime = new Date(`${formData.date}T${formData.endHour}:${formData.endMinute}:00`);
-      
-      // Calculate editCutoff (48 hours before shift start)
-      const editCutoffDate = new Date(startDateTime);
-      editCutoffDate.setHours(editCutoffDate.getHours() - 48);
+    // Calculate editCutoff (48 hours before shift start)
+    const editCutoffDate = new Date(startDateTime);
+    editCutoffDate.setHours(editCutoffDate.getHours() - 48);
 
-      const submitData = {
-        location: formData.location,
-        date: formData.date,
-        startTime: startDateTime.toISOString(),
-        endTime: endDateTime.toISOString(),
-        requiredSkill: formData.requiredSkill,
-        requiredCount: parseInt(formData.requiredCount),
-        assignedStaff: formData.assignedStaff || [],
-        managerNotes: formData.managerNotes || "",
-        status: "draft",
-        createdBy: userId,
-        editCutoff: editCutoffDate.toISOString(),
-      };
+    const submitData = {
+      location: formData.location,
+      date: dateStr,  // Use the date string from form
+      startTime: startDateTime.toISOString(),  // Use the constructed date
+      endTime: endDateTime.toISOString(),      // Use the constructed date
+      requiredSkill: formData.requiredSkill,
+      requiredCount: parseInt(formData.requiredCount),
+      assignedStaff: formData.assignedStaff || [],
+      managerNotes: formData.managerNotes || "",
+      status: "draft",
+      createdBy: userId,
+      editCutoff: editCutoffDate.toISOString(),
+    };
 
-      console.log("📤 Submitting:", submitData);
+    console.log("📤 Submitting shift data:", submitData);
+    console.log("📤 Assigned staff IDs:", formData.assignedStaff);
 
-      const url = editShift
-        ? `${process.env.REACT_APP_API_URL}/shifts/${editShift._id}`
-        : `${process.env.REACT_APP_API_URL}/shifts`;
+    const url = editShift
+      ? `${process.env.REACT_APP_API_URL}/shifts/${editShift._id}`
+      : `${process.env.REACT_APP_API_URL}/shifts`;
 
-      const method = editShift ? "put" : "post";
+    const method = editShift ? "put" : "post";
 
-      const res = await axios[method](url, submitData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+    const res = await axios[method](url, submitData, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
 
-      onShiftCreated(res.data.data);
-      onClose();
-    } catch (error) {
-      console.error("Error:", error);
-      setErrors({ submit: error.response?.data?.message || "Error saving shift" });
-    } finally {
-      setLoading(false);
-    }
-  };
+    console.log("✅ Shift saved successfully:", res.data);
+    onShiftCreated(res.data.data);
+    onClose();
+  } catch (error) {
+    console.error("❌ Error saving shift:", error);
+    setErrors({
+      submit: error.response?.data?.message || "Error saving shift",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -263,7 +277,9 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
                   </MenuItem>
                 ))}
               </Select>
-              {errors.location && <FormHelperText>{errors.location}</FormHelperText>}
+              {errors.location && (
+                <FormHelperText>{errors.location}</FormHelperText>
+              )}
             </FormControl>
           </Grid>
 
@@ -294,8 +310,8 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
                 onChange={handleChange}
               >
                 {Array.from({ length: 24 }, (_, i) => (
-                  <MenuItem key={i} value={String(i).padStart(2, '0')}>
-                    {String(i).padStart(2, '0')}
+                  <MenuItem key={i} value={String(i).padStart(2, "0")}>
+                    {String(i).padStart(2, "0")}
                   </MenuItem>
                 ))}
               </TextField>
@@ -327,8 +343,8 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
                 onChange={handleChange}
               >
                 {Array.from({ length: 24 }, (_, i) => (
-                  <MenuItem key={i} value={String(i).padStart(2, '0')}>
-                    {String(i).padStart(2, '0')}
+                  <MenuItem key={i} value={String(i).padStart(2, "0")}>
+                    {String(i).padStart(2, "0")}
                   </MenuItem>
                 ))}
               </TextField>
@@ -367,7 +383,9 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
                 <MenuItem value="busser">Busser</MenuItem>
                 <MenuItem value="manager">Manager</MenuItem>
               </Select>
-              {errors.requiredSkill && <FormHelperText>{errors.requiredSkill}</FormHelperText>}
+              {errors.requiredSkill && (
+                <FormHelperText>{errors.requiredSkill}</FormHelperText>
+              )}
             </FormControl>
           </Grid>
 
@@ -391,7 +409,15 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
             <Typography variant="subtitle2" gutterBottom>
               Assign Staff
             </Typography>
-            <Box sx={{ maxHeight: 200, overflowY: "auto", border: "1px solid #e0e0e0", p: 1, borderRadius: 1 }}>
+            <Box
+              sx={{
+                maxHeight: 200,
+                overflowY: "auto",
+                border: "1px solid #e0e0e0",
+                p: 1,
+                borderRadius: 1,
+              }}
+            >
               {loadingStaff ? (
                 <CircularProgress size={24} />
               ) : staff.length > 0 ? (
@@ -400,8 +426,16 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
                     key={staffMember._id}
                     label={staffMember.name}
                     onClick={() => handleStaffToggle(staffMember._id)}
-                    color={formData.assignedStaff?.includes(staffMember._id) ? "primary" : "default"}
-                    variant={formData.assignedStaff?.includes(staffMember._id) ? "filled" : "outlined"}
+                    color={
+                      formData.assignedStaff?.includes(staffMember._id)
+                        ? "primary"
+                        : "default"
+                    }
+                    variant={
+                      formData.assignedStaff?.includes(staffMember._id)
+                        ? "filled"
+                        : "outlined"
+                    }
                     sx={{ m: 0.5 }}
                   />
                 ))

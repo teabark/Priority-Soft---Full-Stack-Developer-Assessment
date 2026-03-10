@@ -6,11 +6,9 @@ import {
   Button,
   Chip,
   Fab,
-  Alert
+  Alert,
 } from "@mui/material";
-import {
-  Add as AddIcon,
-} from "@mui/icons-material";
+import { Add as AddIcon } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import Layout from "../components/layout/Layout";
 import CreateShiftForm from "../components/shifts/CreateShiftForm";
@@ -30,8 +28,8 @@ const Shifts = () => {
     inProgress: 0,
   });
 
-  const isManager = user?.role === 'admin' || user?.role === 'manager';
-  const isStaff = user?.role === 'staff';
+  const isManager = user?.role === "admin" || user?.role === "manager";
+  const isStaff = user?.role === "staff";
 
   useEffect(() => {
     fetchShifts();
@@ -39,46 +37,69 @@ const Shifts = () => {
 
   const fetchShifts = async () => {
     try {
-      console.log('📡 Fetching shifts...');
-      
-      const token = localStorage.getItem('token');
-      const res = await axios.get(`${process.env.REACT_APP_API_URL}/shifts/simple-list`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      console.log('✅ Shifts response:', res.data);
+      console.log("📡 Fetching shifts...");
+
+      const token = localStorage.getItem("token");
+      const res = await axios.get(
+        `${process.env.REACT_APP_API_URL}/shifts/simple-list`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      console.log("✅ Shifts response:", res.data);
 
       if (res.data.data && res.data.data.length > 0) {
         let filteredShifts = res.data.data;
-        
+
         // For staff, only show shifts assigned to them
         if (isStaff) {
-          filteredShifts = res.data.data.filter(shift => 
-            shift.assignedStaff?.some(s => s._id === user?.id)
+          console.log("🔍 Filtering shifts for staff:", user?.id, user?._id);
+          console.log(
+            "📊 All shifts:",
+            res.data.data.map((s) => ({
+              id: s._id,
+              assigned: s.assignedStaff?.map((a) => a._id || a),
+            })),
           );
+
+          filteredShifts = res.data.data.filter((shift) =>
+            shift.assignedStaff?.some((s) => {
+              const staffId = s._id || s;
+              const match = staffId === user?.id || staffId === user?._id;
+              if (match) console.log("✅ Match found for shift:", shift._id);
+              return match;
+            }),
+          );
+
+          console.log("📊 Filtered shifts:", filteredShifts.length);
         }
-        
+
         setShifts(filteredShifts);
-        
+
         // Calculate stats
-        const published = filteredShifts.filter(s => s.status === 'published').length;
-        const draft = filteredShifts.filter(s => s.status === 'draft').length;
-        const inProgress = filteredShifts.filter(s => s.status === 'in_progress').length;
-        
+        const published = filteredShifts.filter(
+          (s) => s.status === "published",
+        ).length;
+        const draft = filteredShifts.filter((s) => s.status === "draft").length;
+        const inProgress = filteredShifts.filter(
+          (s) => s.status === "in_progress",
+        ).length;
+
         setStats({
           total: filteredShifts.length,
           published,
           draft,
-          inProgress
+          inProgress,
         });
       } else {
         setShifts([]);
         setStats({ total: 0, published: 0, draft: 0, inProgress: 0 });
       }
     } catch (error) {
-      console.error('❌ Error fetching shifts:', error);
+      console.error("❌ Error fetching shifts:", error);
       setShifts([]);
       setStats({ total: 0, published: 0, draft: 0, inProgress: 0 });
     } finally {
@@ -102,51 +123,75 @@ const Shifts = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case "published": return "success";
-      case "draft": return "default";
-      case "in_progress": return "info";
-      case "completed": return "secondary";
-      case "cancelled": return "error";
-      default: return "default";
+      case "published":
+        return "success";
+      case "draft":
+        return "default";
+      case "in_progress":
+        return "info";
+      case "completed":
+        return "secondary";
+      case "cancelled":
+        return "error";
+      default:
+        return "default";
     }
   };
 
-  // Ultra-simple rows transformation
-  const rows = shifts.map((shift, index) => ({
-    id: shift._id || `row-${index}`,
-    locationName: shift.location?.name || 'N/A',
-    shiftDate: shift.startTime ? new Date(shift.startTime).toLocaleDateString() : 'N/A',
-    startTime: shift.startTime ? new Date(shift.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A',
-    endTime: shift.endTime ? new Date(shift.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A',
-    shiftSkill: shift.requiredSkill || 'N/A',
-    requiredCount: shift.requiredCount || 0,
-    assignedCount: shift.assignedStaff?.length || 0,
-    shiftStatus: shift.status || 'draft'
-  }));
+  const rows = shifts.map((shift, index) => {
+    const row = {
+      id: shift._id || `row-${index}`,
+      locationName: shift.location?.name || "N/A",
+      shiftDate: shift.startTime
+        ? new Date(shift.startTime).toLocaleDateString()
+        : "N/A",
+      startTime: shift.startTime
+        ? new Date(shift.startTime).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "N/A",
+      endTime: shift.endTime
+        ? new Date(shift.endTime).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "N/A",
+      shiftSkill: shift.requiredSkill || "N/A",
+      requiredCount: shift.requiredCount || 0,
+      assignedCount: shift.assignedStaff?.length || 0,
+      shiftStatus: shift.status || "draft",
+    };
+
+    console.log("📊 Created row:", row);
+    return row;
+  });
+
+  console.log("📊 Total rows:", rows.length);
+  console.log("📊 First row:", rows[0]);
 
   // Columns based on user role
   const getColumns = () => {
     const baseColumns = [
-      { field: 'locationName', headerName: 'Location', width: 150 },
-      { field: 'shiftDate', headerName: 'Date', width: 120 },
-      { field: 'startTime', headerName: 'Start', width: 100 },
-      { field: 'endTime', headerName: 'End', width: 100 },
-      { field: 'shiftSkill', headerName: 'Skill', width: 120 },
-      { field: 'requiredCount', headerName: 'Needed', width: 80 },
-      { 
-        field: 'assignedCount', 
-        headerName: 'Assigned', 
-        width: 100,
-        valueGetter: (params) => {
-          if (!params || !params.row) return '0/0';
+      { field: "locationName", headerName: "Location", width: 150 },
+      { field: "shiftDate", headerName: "Date", width: 120 },
+      { field: "startTime", headerName: "Start", width: 100 },
+      { field: "endTime", headerName: "End", width: 100 },
+      { field: "shiftSkill", headerName: "Skill", width: 120 },
+      { field: "requiredCount", headerName: "Needed", width: 80 },
+      {
+        field: "assignedCount",
+        headerName: "Assigned",
+        width: 120,
+        renderCell: (params) => {
           const assigned = params.row.assignedCount || 0;
           const required = params.row.requiredCount || 0;
           return `${assigned}/${required}`;
-        }
+        },
       },
-      { 
-        field: 'shiftStatus', 
-        headerName: 'Status', 
+      {
+        field: "shiftStatus",
+        headerName: "Status",
         width: 120,
         renderCell: (params) => (
           <Chip
@@ -154,8 +199,8 @@ const Shifts = () => {
             color={getStatusColor(params.value)}
             size="small"
           />
-        )
-      }
+        ),
+      },
     ];
 
     // Add actions column only for managers
@@ -163,16 +208,14 @@ const Shifts = () => {
       return [
         ...baseColumns,
         {
-          field: 'actions',
-          headerName: 'Actions',
+          field: "actions",
+          headerName: "Actions",
           width: 120,
           sortable: false,
           renderCell: (params) => (
-            <Box>
-              {/* Add action buttons here if needed */}
-            </Box>
-          )
-        }
+            <Box>{/* Add action buttons here if needed */}</Box>
+          ),
+        },
       ];
     }
 
@@ -182,18 +225,18 @@ const Shifts = () => {
   return (
     <Layout>
       {/* Stats Cards */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-        <Paper sx={{ p: 2, flex: 1, bgcolor: '#e3f2fd' }}>
+      <Box sx={{ display: "flex", gap: 2, mb: 3 }}>
+        <Paper sx={{ p: 2, flex: 1, bgcolor: "#e3f2fd" }}>
           <Typography variant="h6">{stats.total}</Typography>
           <Typography variant="body2">
-            {isStaff ? 'My Shifts' : 'Total Shifts'}
+            {isStaff ? "My Shifts" : "Total Shifts"}
           </Typography>
         </Paper>
-        <Paper sx={{ p: 2, flex: 1, bgcolor: '#e8f5e8' }}>
+        <Paper sx={{ p: 2, flex: 1, bgcolor: "#e8f5e8" }}>
           <Typography variant="h6">{stats.published}</Typography>
           <Typography variant="body2">Published</Typography>
         </Paper>
-        <Paper sx={{ p: 2, flex: 1, bgcolor: '#fff3e0' }}>
+        <Paper sx={{ p: 2, flex: 1, bgcolor: "#fff3e0" }}>
           <Typography variant="h6">{stats.draft}</Typography>
           <Typography variant="body2">Draft</Typography>
         </Paper>
@@ -213,9 +256,9 @@ const Shifts = () => {
         }}
       >
         <Typography variant="h4">
-          {isStaff ? 'My Shifts' : 'Shift Management'}
+          {isStaff ? "My Shifts" : "Shift Management"}
         </Typography>
-        
+
         {isManager && (
           <Button
             variant="contained"

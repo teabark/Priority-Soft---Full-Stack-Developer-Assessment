@@ -37,6 +37,9 @@ import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 
 const SwapRequests = () => {
+  console.log('🔥🔥🔥 SWAP REQUESTS PAGE LOADED 🔥🔥🔥');
+  console.log('Current time:', new Date().toLocaleTimeString());
+  
   const [shifts, setShifts] = useState([]);
   const [staff, setStaff] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
@@ -56,63 +59,109 @@ const SwapRequests = () => {
     severity: "success",
   });
 
-  const { user } = useAuth();
+  const { user, token, loading: authLoading } = useAuth();
   const isManager = user?.role === "admin" || user?.role === "manager";
   const isStaff = user?.role === "staff";
 
-  useEffect(() => {
+  // Debug logs
+  console.log("🔥 SwapRequests mounted");
+  console.log("📊 User object:", user);
+  console.log("📊 User id:", user?.id);
+  console.log("📊 User role:", user?.role);
+  console.log('📊 Auth loading:', authLoading);
+  console.log('📊 Token exists:', !!token);
+
+  // Fetch data only when auth is ready
+useEffect(() => {
+  console.log('🚀🚀🚀 FETCH EFFECT RUNNING 🚀🚀🚀');
+  console.log('   authLoading:', authLoading);
+  console.log('   user:', user?._id);
+  console.log('   token:', !!token);
+  
+  if (!authLoading && user && token) {
+    console.log('✅ CONDITIONS MET - calling fetchAllData');
     fetchAllData();
-  }, []);
+  } else {
+    console.log('⏳ Conditions not met:', {
+      authLoadingDone: !authLoading,
+      hasUser: !!user,
+      hasToken: !!token
+    });
+  }
+}, [authLoading, user, token]);
 
-  const fetchAllData = async () => {
-    setLoading(true);
-    try {
-      await Promise.all([
-        fetchShifts(),
-        fetchStaff(),
-        fetchMyRequests(),
-        fetchPendingApprovals(),
-        fetchAvailableShifts(),
-      ]);
-    } catch (error) {
-      showMessage("error", "Error loading data");
-    } finally {
-      setLoading(false);
-    }
-  };
+const fetchAllData = async () => {
+  console.log('🟢🟢🟢🟢🟢 FETCH ALL DATA STARTED 🟢🟢🟢🟢🟢');
+  setLoading(true);
+  try {
+    await Promise.all([
+      fetchShifts(),
+      fetchStaff(),
+    ]);
+    console.log('✅ Promise.all completed');
+  } catch (error) {
+    console.error("❌ Error in fetchAllData:", error);
+    showMessage("error", "Error loading data");
+  } finally {
+    console.log('🏁 fetchAllData finished');
+    setLoading(false);
+  }
+};
 
-  const fetchShifts = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get(
-        `${process.env.REACT_APP_API_URL}/shifts/simple-list`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      setShifts(res.data.data || []);
-    } catch (error) {
-      console.error("Error fetching shifts:", error);
-      throw error;
+const fetchShifts = async () => {
+  console.log('🔵🔵🔵 FETCH SHIFTS FUNCTION CALLED 🔵🔵🔵');
+  console.log('🔵 Token in fetchShifts:', token ? 'yes' : 'no');
+  
+  try {
+    console.log('📡 Fetching shifts from API...');
+    const res = await axios.get(
+      `${process.env.REACT_APP_API_URL}/shifts/simple-list`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+    console.log('✅ Shifts API response:', res.status);
+    console.log('📊 Shifts data:', res.data);
+    
+    // 🔍 DEBUG: Check assigned staff for each shift
+    res.data.data?.forEach((shift, index) => {
+      console.log(`Shift ${index + 1}:`, {
+        id: shift._id,
+        location: shift.location?.name,
+        requiredSkill: shift.requiredSkill,
+        assignedStaff: shift.assignedStaff,
+        assignedCount: shift.assignedStaff?.length || 0
+      });
+    });
+    
+    setShifts(res.data.data || []);
+  } catch (error) {
+    console.error('❌ Error in fetchShifts:', error.message);
+    if (error.response) {
+      console.error('❌ Response data:', error.response.data);
+      console.error('❌ Response status:', error.response.status);
     }
-  };
+  }
+};
 
   const fetchStaff = async () => {
+    console.log('🟣🟣🟣 FETCH STAFF FUNCTION CALLED 🟣🟣🟣');
     try {
-      const token = localStorage.getItem("token");
+      console.log("🔍 Fetching staff...");
       const res = await axios.get(`${process.env.REACT_APP_API_URL}/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setStaff(res.data.data?.filter((u) => u.role === "staff") || []);
+      const staffMembers =
+        res.data.data?.filter((u) => u.role === "staff") || [];
+      console.log("👥 Staff members:", staffMembers.length);
+      setStaff(staffMembers);
     } catch (error) {
-      console.error("Error fetching staff:", error);
-      throw error;
+      console.error("❌ Error fetching staff:", error);
     }
   };
 
   const fetchMyRequests = async () => {
     try {
-      const token = localStorage.getItem("token");
       const res = await axios.get(
         `${process.env.REACT_APP_API_URL}/swaps/my-requests`,
         {
@@ -128,7 +177,6 @@ const SwapRequests = () => {
   const fetchPendingApprovals = async () => {
     if (!isManager) return;
     try {
-      const token = localStorage.getItem("token");
       const res = await axios.get(
         `${process.env.REACT_APP_API_URL}/swaps/pending-approvals`,
         {
@@ -144,7 +192,6 @@ const SwapRequests = () => {
   const fetchAvailableShifts = async () => {
     if (!isStaff) return;
     try {
-      const token = localStorage.getItem("token");
       const res = await axios.get(
         `${process.env.REACT_APP_API_URL}/swaps/available`,
         {
@@ -162,7 +209,7 @@ const SwapRequests = () => {
   };
 
   const handleRequestSwap = (shift) => {
-    console.log('🔘 Request Swap clicked for shift:', shift?._id);
+    console.log("🔘 Request Swap clicked for shift:", shift?._id);
     setSelectedShift(shift);
     setSelectedTargetStaff("");
     setRequestNote("");
@@ -170,6 +217,7 @@ const SwapRequests = () => {
   };
 
   const handleRequestDrop = (shift) => {
+    console.log("🔘 Drop Shift clicked for shift:", shift?._id);
     setSelectedShift(shift);
     setRequestNote("");
     setOpenDropDialog(true);
@@ -183,8 +231,6 @@ const SwapRequests = () => {
 
     setSubmitting(true);
     try {
-      const token = localStorage.getItem("token");
-
       console.log("📤 Submitting swap request:", {
         shiftId: selectedShift._id,
         targetStaffId: selectedTargetStaff,
@@ -221,8 +267,6 @@ const SwapRequests = () => {
   const submitDropRequest = async () => {
     setSubmitting(true);
     try {
-      const token = localStorage.getItem("token");
-
       await axios.post(
         `${process.env.REACT_APP_API_URL}/swaps/request`,
         {
@@ -247,8 +291,6 @@ const SwapRequests = () => {
 
   const handleApproveRequest = async (request, shift) => {
     try {
-      const token = localStorage.getItem("token");
-
       await axios.put(
         `${process.env.REACT_APP_API_URL}/swaps/${request._id}`,
         { status: "approved" },
@@ -266,8 +308,6 @@ const SwapRequests = () => {
 
   const handleRejectRequest = async (request, shift) => {
     try {
-      const token = localStorage.getItem("token");
-
       await axios.put(
         `${process.env.REACT_APP_API_URL}/swaps/${request._id}`,
         { status: "rejected" },
@@ -288,8 +328,6 @@ const SwapRequests = () => {
       return;
 
     try {
-      const token = localStorage.getItem("token");
-
       await axios.delete(
         `${process.env.REACT_APP_API_URL}/swaps/${requestId}`,
         { headers: { Authorization: `Bearer ${token}` } },
@@ -306,8 +344,6 @@ const SwapRequests = () => {
 
   const handlePickupShift = async (shift) => {
     try {
-      const token = localStorage.getItem("token");
-
       await axios.post(
         `${process.env.REACT_APP_API_URL}/swaps/request`,
         {
@@ -353,7 +389,14 @@ const SwapRequests = () => {
     }
   };
 
-  if (loading) {
+  // Define tab display conditions
+  const showMyShifts =
+    (isStaff && tabValue === 2) || (isManager && tabValue === 1);
+  const showMyRequests = isStaff && tabValue === 0;
+  const showAvailableShifts = isStaff && tabValue === 1;
+  const showPendingApprovals = isManager && tabValue === 0;
+
+  if (loading || authLoading) {
     return (
       <Layout>
         <Box
@@ -370,6 +413,32 @@ const SwapRequests = () => {
 
   return (
     <Layout>
+      {/* TEMPORARY TEST BUTTON - Highly visible */}
+      <Box
+        sx={{
+          position: "fixed",
+          top: 10,
+          left: 10,
+          zIndex: 99999,
+          backgroundColor: "red",
+          p: 2,
+          borderRadius: 1,
+        }}
+      >
+        <Button
+          variant="contained"
+          color="warning"
+          size="large"
+          onClick={() => {
+            console.log("🧪 TEST BUTTON CLICKED");
+            alert("Test button clicked!");
+            setOpenSwapDialog(true);
+          }}
+        >
+          🧪 TEST DIALOG
+        </Button>
+      </Box>
+
       <Box sx={{ p: 3 }}>
         <Box
           display="flex"
@@ -397,13 +466,16 @@ const SwapRequests = () => {
           </Tabs>
         </Box>
 
-        {/* My Shifts Tab (Common for all) */}
-        {tabValue === (isStaff ? 2 : 0) && (
+        {/* My Shifts Tab */}
+        {showMyShifts && (
           <Grid container spacing={3}>
             {shifts
-              .filter((shift) =>
-                shift.assignedStaff?.some((s) => s._id === user?.id),
-              )
+              .filter((shift) => {
+                return shift.assignedStaff?.some((s) => {
+                  const staffId = s._id || s;
+                  return staffId === user?._id || staffId === user?.id;
+                });
+              })
               .map((shift) => (
                 <Grid size={{ xs: 12, md: 6 }} key={shift._id}>
                   <Card>
@@ -433,6 +505,7 @@ const SwapRequests = () => {
                           variant="outlined"
                           startIcon={<SwapIcon />}
                           onClick={() => handleRequestSwap(shift)}
+                          disabled={staff.length < 2}
                         >
                           Request Swap
                         </Button>
@@ -451,7 +524,10 @@ const SwapRequests = () => {
                 </Grid>
               ))}
             {shifts.filter((shift) =>
-              shift.assignedStaff?.some((s) => s._id === user?.id),
+              shift.assignedStaff?.some((s) => {
+                const staffId = s._id || s;
+                return staffId === user?._id || staffId === user?.id;
+              }),
             ).length === 0 && (
               <Grid size={12}>
                 <Alert severity="info">
@@ -463,7 +539,7 @@ const SwapRequests = () => {
         )}
 
         {/* My Requests Tab (Staff) */}
-        {isStaff && tabValue === 0 && (
+        {showMyRequests && (
           <Grid container spacing={3}>
             {myRequests.length > 0 ? (
               myRequests.map((req) => (
@@ -527,7 +603,7 @@ const SwapRequests = () => {
         )}
 
         {/* Available Shifts Tab (Staff) */}
-        {isStaff && tabValue === 1 && (
+        {showAvailableShifts && (
           <Grid container spacing={3}>
             {availableShifts.length > 0 ? (
               availableShifts.map((shift) => (
@@ -577,7 +653,7 @@ const SwapRequests = () => {
         )}
 
         {/* Pending Approvals Tab (Manager) */}
-        {isManager && tabValue === 0 && (
+        {showPendingApprovals && (
           <Grid container spacing={3}>
             {pendingRequests.length > 0 ? (
               pendingRequests.map((req) => (
@@ -677,7 +753,7 @@ const SwapRequests = () => {
                   label="Swap With"
                 >
                   {staff
-                    .filter((s) => s._id !== user?.id)
+                    .filter((s) => s._id !== user?._id && s._id !== user?.id)
                     .map((s) => (
                       <MenuItem key={s._id} value={s._id}>
                         {s.name}

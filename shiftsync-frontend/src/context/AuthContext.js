@@ -22,27 +22,34 @@ export const AuthProvider = ({ children }) => {
   const navigate = useNavigate();
 
   // ✅ Load user from localStorage on mount only
-  useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    const storedToken = localStorage.getItem("token");
-    
-    console.log("📦 Loading from localStorage - user:", storedUser);
-    console.log("📦 Loading from localStorage - token:", storedToken);
-    
-    if (storedUser && storedUser !== "undefined" && storedToken) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        console.log("✅ Setting user from localStorage:", parsedUser.name);
-        setUser(parsedUser);
-        setToken(storedToken);
-        axios.defaults.headers.common["Authorization"] = `Bearer ${storedToken}`;
-      } catch (e) {
-        console.error("Error parsing user:", e);
-        localStorage.removeItem("user");
-      }
+useEffect(() => {
+  const storedUser = localStorage.getItem("user");
+  const storedToken = localStorage.getItem("token");
+  
+  console.log('📦 Loading from storage - token:', storedToken);
+  console.log('📦 Loading from storage - user:', storedUser);
+  
+  if (storedUser && storedUser !== "undefined" && storedToken) {
+    try {
+      const parsedUser = JSON.parse(storedUser);
+      
+      // ✅ NORMALIZE: Ensure _id exists
+      const normalizedUser = {
+        ...parsedUser,
+        _id: parsedUser._id || parsedUser.id
+      };
+      
+      setUser(normalizedUser);
+      setToken(storedToken);
+      axios.defaults.headers.common["Authorization"] = `Bearer ${storedToken}`;
+      console.log('✅ User loaded with _id:', normalizedUser._id);
+    } catch (e) {
+      console.error("Error parsing user:", e);
+      localStorage.removeItem("user");
     }
-    setLoading(false);
-  }, []);
+  }
+  setLoading(false);
+}, []);
 
   // 👤 Track user state changes
   useEffect(() => {
@@ -67,51 +74,57 @@ export const AuthProvider = ({ children }) => {
     toast.info("Logged out successfully");
   }, [navigate]);
 
-  const login = async (email, password) => {
-    try {
-      console.log("🔍 Login attempt starting...");
+const login = async (email, password) => {
+  try {
+    console.log("🔍 Login attempt starting...");
 
-      const res = await axios.post(
-        `${process.env.REACT_APP_API_URL}/auth/login`,
-        {
-          email,
-          password,
-        },
-      );
+    const res = await axios.post(
+      `${process.env.REACT_APP_API_URL}/auth/login`,
+      {
+        email,
+        password,
+      },
+    );
 
-      console.log("✅ Login successful");
+    console.log("✅ Login successful");
 
-      const token = res.data.token;
-      const user = res.data.user || res.data.data;
+    const token = res.data.token;
+    const user = res.data.user || res.data.data;
 
-      // Save to localStorage
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(user));
-      
-      console.log("✅ User saved to localStorage:", user.name);
-      console.log("✅ Token saved to localStorage");
+    // ✅ NORMALIZE: Ensure _id exists
+    const normalizedUser = {
+      ...user,
+      _id: user._id || user.id
+    };
 
-      // Set axios default header
-      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    // Save to localStorage
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(normalizedUser));
+    
+    console.log("✅ User saved with _id:", normalizedUser._id);
 
-      // Update state
-      setToken(token);
-      setUser(user);
+    // Set axios default header
+    axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-      toast.success(`Welcome back, ${user.name}!`);
-      navigate("/");
+    // Update state
+    setToken(token);
+    setUser(normalizedUser);
 
-      return { success: true };
-    } catch (error) {
-      console.error("❌ Login error:", error);
-      const message = error.response?.data?.message || "Login failed";
-      toast.error(message);
-      return { success: false, message };
-    }
-  };
+    toast.success(`Welcome back, ${normalizedUser.name}!`);
+    navigate("/");
+
+    return { success: true };
+  } catch (error) {
+    console.error("❌ Login error:", error);
+    const message = error.response?.data?.message || "Login failed";
+    toast.error(message);
+    return { success: false, message };
+  }
+};
 
   const value = {
     user,
+    token,
     loading,
     login,
     logout,
