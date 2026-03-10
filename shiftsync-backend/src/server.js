@@ -15,9 +15,18 @@ const server = http.createServer(app);
 
 // Setup Socket.io with the server
 const io = setupSocket(server);
+console.log('✅ Socket.io initialized');
 
 // Make io accessible to routes and controllers
 app.set('io', io);
+console.log('✅ io set in app');
+
+// ===== ADDED: Initialize NotificationService and make it available to routes =====
+const NotificationService = require('./services/notification.service');
+const notificationService = new NotificationService(io);
+app.set('notificationService', notificationService);
+console.log('✅ NotificationService initialized and attached to app');
+// =============================================================================
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
@@ -230,7 +239,6 @@ server.listen(PORT, () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
 });
-
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

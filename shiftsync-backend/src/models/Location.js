@@ -212,9 +212,10 @@ const locationSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Virtual for active staff count
+// NEW (safe) version:
 locationSchema.virtual('activeStaffCount').get(function() {
-  return this.staff.filter(s => s.isActive).length;
+  if (!this.staff) return 0;
+  return this.staff.filter(s => s && s.isActive).length;
 });
 
 // Virtual for shifts at this location
