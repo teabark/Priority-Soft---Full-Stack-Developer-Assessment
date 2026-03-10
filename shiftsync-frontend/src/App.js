@@ -7,6 +7,7 @@ import 'react-toastify/dist/ReactToastify.css';
 
 import { AuthProvider } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { NotificationProvider } from './context/NotificationContext';
 import PrivateRoute from './components/auth/PrivateRoute';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -32,6 +33,7 @@ function App() {
       <CssBaseline />
       <Router>
         <AuthProvider>
+          <NotificationProvider>
           <SocketProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
@@ -63,6 +65,7 @@ function App() {
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </SocketProvider>
+          </NotificationProvider>
         </AuthProvider>
       </Router>
       <ToastContainer position="top-right" autoClose={3000} />

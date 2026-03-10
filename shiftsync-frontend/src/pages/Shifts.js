@@ -30,14 +30,12 @@ const Shifts = () => {
     inProgress: 0,
   });
 
+  const isManager = user?.role === 'admin' || user?.role === 'manager';
+  const isStaff = user?.role === 'staff';
+
   useEffect(() => {
     fetchShifts();
   }, []);
-
-  useEffect(() => {
-    console.log('🔄 shifts state updated:', shifts);
-    console.log('📊 Number of shifts in state:', shifts.length);
-  }, [shifts]);
 
   const fetchShifts = async () => {
     try {
@@ -53,22 +51,29 @@ const Shifts = () => {
       console.log('✅ Shifts response:', res.data);
 
       if (res.data.data && res.data.data.length > 0) {
-        console.log('📊 First shift raw data:', res.data.data[0]);
-        setShifts(res.data.data);
+        let filteredShifts = res.data.data;
+        
+        // For staff, only show shifts assigned to them
+        if (isStaff) {
+          filteredShifts = res.data.data.filter(shift => 
+            shift.assignedStaff?.some(s => s._id === user?.id)
+          );
+        }
+        
+        setShifts(filteredShifts);
         
         // Calculate stats
-        const published = res.data.data.filter(s => s.status === 'published').length;
-        const draft = res.data.data.filter(s => s.status === 'draft').length;
-        const inProgress = res.data.data.filter(s => s.status === 'in_progress').length;
+        const published = filteredShifts.filter(s => s.status === 'published').length;
+        const draft = filteredShifts.filter(s => s.status === 'draft').length;
+        const inProgress = filteredShifts.filter(s => s.status === 'in_progress').length;
         
         setStats({
-          total: res.data.data.length,
+          total: filteredShifts.length,
           published,
           draft,
           inProgress
         });
       } else {
-        console.log('⚠️ No shifts found');
         setShifts([]);
         setStats({ total: 0, published: 0, draft: 0, inProgress: 0 });
       }
@@ -81,20 +86,10 @@ const Shifts = () => {
     }
   };
 
-const handleCreateShift = () => {
-  console.log('🔴 Create Shift button clicked!');
-  console.log('📊 Current openForm state:', openForm);
-  console.log('📝 Setting editShift to null');
-  setEditShift(null);
-  console.log('🔵 Setting openForm to true');
-  setOpenForm(true);
-  console.log('✅ New openForm state should be:', true);
-};
-
-// Add this useEffect to track openForm changes
-useEffect(() => {
-  console.log('🔄 openForm state changed to:', openForm);
-}, [openForm]);
+  const handleCreateShift = () => {
+    setEditShift(null);
+    setOpenForm(true);
+  };
 
   const handleFormClose = () => {
     setOpenForm(false);
@@ -129,41 +124,60 @@ useEffect(() => {
     shiftStatus: shift.status || 'draft'
   }));
 
-// Ultra-simple columns
-const columns = [
-  { field: 'locationName', headerName: 'Location', width: 150 },
-  { field: 'shiftDate', headerName: 'Date', width: 120 },
-  { field: 'startTime', headerName: 'Start', width: 100 },
-  { field: 'endTime', headerName: 'End', width: 100 },
-  { field: 'shiftSkill', headerName: 'Skill', width: 120 },
-  { field: 'requiredCount', headerName: 'Needed', width: 80 },
-  { 
-    field: 'assignedCount', 
-    headerName: 'Assigned', 
-    width: 100,
-    valueGetter: (params) => {
-      if (!params || !params.row) return '0/0';
-      const assigned = params.row.assignedCount || 0;
-      const required = params.row.requiredCount || 0;
-      return `${assigned}/${required}`;
+  // Columns based on user role
+  const getColumns = () => {
+    const baseColumns = [
+      { field: 'locationName', headerName: 'Location', width: 150 },
+      { field: 'shiftDate', headerName: 'Date', width: 120 },
+      { field: 'startTime', headerName: 'Start', width: 100 },
+      { field: 'endTime', headerName: 'End', width: 100 },
+      { field: 'shiftSkill', headerName: 'Skill', width: 120 },
+      { field: 'requiredCount', headerName: 'Needed', width: 80 },
+      { 
+        field: 'assignedCount', 
+        headerName: 'Assigned', 
+        width: 100,
+        valueGetter: (params) => {
+          if (!params || !params.row) return '0/0';
+          const assigned = params.row.assignedCount || 0;
+          const required = params.row.requiredCount || 0;
+          return `${assigned}/${required}`;
+        }
+      },
+      { 
+        field: 'shiftStatus', 
+        headerName: 'Status', 
+        width: 120,
+        renderCell: (params) => (
+          <Chip
+            label={params.value}
+            color={getStatusColor(params.value)}
+            size="small"
+          />
+        )
+      }
+    ];
+
+    // Add actions column only for managers
+    if (isManager) {
+      return [
+        ...baseColumns,
+        {
+          field: 'actions',
+          headerName: 'Actions',
+          width: 120,
+          sortable: false,
+          renderCell: (params) => (
+            <Box>
+              {/* Add action buttons here if needed */}
+            </Box>
+          )
+        }
+      ];
     }
-  },
-  { 
-    field: 'shiftStatus', 
-    headerName: 'Status', 
-    width: 120,
-    renderCell: (params) => {
-      if (!params || !params.row) return null;
-      return (
-        <Chip
-          label={params.value}
-          color={getStatusColor(params.value)}
-          size="small"
-        />
-      );
-    }
-  }
-];
+
+    return baseColumns;
+  };
 
   return (
     <Layout>
@@ -171,7 +185,9 @@ const columns = [
       <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
         <Paper sx={{ p: 2, flex: 1, bgcolor: '#e3f2fd' }}>
           <Typography variant="h6">{stats.total}</Typography>
-          <Typography variant="body2">Total Shifts</Typography>
+          <Typography variant="body2">
+            {isStaff ? 'My Shifts' : 'Total Shifts'}
+          </Typography>
         </Paper>
         <Paper sx={{ p: 2, flex: 1, bgcolor: '#e8f5e8' }}>
           <Typography variant="h6">{stats.published}</Typography>
@@ -181,13 +197,9 @@ const columns = [
           <Typography variant="h6">{stats.draft}</Typography>
           <Typography variant="body2">Draft</Typography>
         </Paper>
-        <Paper sx={{ p: 2, flex: 1, bgcolor: '#ffebee' }}>
-          <Typography variant="h6">{stats.inProgress}</Typography>
-          <Typography variant="body2">In Progress</Typography>
-        </Paper>
       </Box>
 
-      {/* Header with Create Button */}
+      {/* Header with Create Button - Only for managers */}
       <Box
         sx={{
           display: "flex",
@@ -200,35 +212,31 @@ const columns = [
           borderRadius: 1,
         }}
       >
-        <Typography variant="h4">Shift Management</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleCreateShift}
-          sx={{
-            bgcolor: "white",
-            color: "#1976d2",
-            "&:hover": { bgcolor: "#f5f5f5" },
-          }}
-        >
-          Create Shift
-        </Button>
+        <Typography variant="h4">
+          {isStaff ? 'My Shifts' : 'Shift Management'}
+        </Typography>
+        
+        {isManager && (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleCreateShift}
+            sx={{
+              bgcolor: "white",
+              color: "#1976d2",
+              "&:hover": { bgcolor: "#f5f5f5" },
+            }}
+          >
+            Create Shift
+          </Button>
+        )}
       </Box>
 
-      {/* Debug info */}
-      <Alert severity="info" sx={{ mb: 2 }}>
-        <Typography variant="body2">
-          Shifts loaded: {shifts.length}<br />
-          Rows prepared: {rows.length}<br />
-          Loading: {loading ? "Yes" : "No"}
-        </Typography>
-      </Alert>
-
-      {/* Ultra Simple DataGrid */}
+      {/* Shifts Table */}
       <Paper sx={{ height: 500, width: "100%" }}>
         <DataGrid
           rows={rows}
-          columns={columns}
+          columns={getColumns()}
           pageSize={10}
           rowsPerPageOptions={[10]}
           loading={loading}
@@ -237,30 +245,14 @@ const columns = [
         />
       </Paper>
 
-      {/* Create/Edit Shift Form */}
-      <CreateShiftForm
-        open={openForm}
-        onClose={handleFormClose}
-        onShiftCreated={handleShiftSaved}
-        editShift={editShift}
-      />
-
-      {/* Floating Action Button */}
-      {(user?.role === 'admin' || user?.role === 'manager') && (
-        <Fab
-          color="primary"
-          aria-label="add"
-          onClick={handleCreateShift}
-          sx={{
-            position: 'fixed',
-            bottom: 16,
-            right: 16,
-            zIndex: 1000,
-            display: { xs: 'flex', md: 'none' }
-          }}
-        >
-          <AddIcon />
-        </Fab>
+      {/* Create/Edit Shift Form - Only for managers */}
+      {isManager && (
+        <CreateShiftForm
+          open={openForm}
+          onClose={handleFormClose}
+          onShiftCreated={handleShiftSaved}
+          editShift={editShift}
+        />
       )}
     </Layout>
   );
