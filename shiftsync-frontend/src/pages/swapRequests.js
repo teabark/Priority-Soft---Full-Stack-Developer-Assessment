@@ -37,9 +37,9 @@ import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 
 const SwapRequests = () => {
-  console.log('🔥🔥🔥 SWAP REQUESTS PAGE LOADED 🔥🔥🔥');
-  console.log('Current time:', new Date().toLocaleTimeString());
-  
+  console.log("🔥🔥🔥 SWAP REQUESTS PAGE LOADED 🔥🔥🔥");
+  console.log("Current time:", new Date().toLocaleTimeString());
+
   const [shifts, setShifts] = useState([]);
   const [staff, setStaff] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
@@ -68,84 +68,87 @@ const SwapRequests = () => {
   console.log("📊 User object:", user);
   console.log("📊 User id:", user?.id);
   console.log("📊 User role:", user?.role);
-  console.log('📊 Auth loading:', authLoading);
-  console.log('📊 Token exists:', !!token);
+  console.log("📊 Auth loading:", authLoading);
+  console.log("📊 Token exists:", !!token);
 
   // Fetch data only when auth is ready
-useEffect(() => {
-  console.log('🚀🚀🚀 FETCH EFFECT RUNNING 🚀🚀🚀');
-  console.log('   authLoading:', authLoading);
-  console.log('   user:', user?._id);
-  console.log('   token:', !!token);
-  
-  if (!authLoading && user && token) {
-    console.log('✅ CONDITIONS MET - calling fetchAllData');
-    fetchAllData();
-  } else {
-    console.log('⏳ Conditions not met:', {
-      authLoadingDone: !authLoading,
-      hasUser: !!user,
-      hasToken: !!token
-    });
-  }
-}, [authLoading, user, token]);
+  useEffect(() => {
+    console.log("🚀🚀🚀 FETCH EFFECT RUNNING 🚀🚀🚀");
+    console.log("   authLoading:", authLoading);
+    console.log("   user:", user?._id);
+    console.log("   token:", !!token);
 
-const fetchAllData = async () => {
-  console.log('🟢🟢🟢🟢🟢 FETCH ALL DATA STARTED 🟢🟢🟢🟢🟢');
-  setLoading(true);
-  try {
-    await Promise.all([
-      fetchShifts(),
-      fetchStaff(),
-    ]);
-    console.log('✅ Promise.all completed');
-  } catch (error) {
-    console.error("❌ Error in fetchAllData:", error);
-    showMessage("error", "Error loading data");
-  } finally {
-    console.log('🏁 fetchAllData finished');
-    setLoading(false);
-  }
-};
-
-const fetchShifts = async () => {
-  console.log('🔵🔵🔵 FETCH SHIFTS FUNCTION CALLED 🔵🔵🔵');
-  console.log('🔵 Token in fetchShifts:', token ? 'yes' : 'no');
-  
-  try {
-    console.log('📡 Fetching shifts from API...');
-    const res = await axios.get(
-      `${process.env.REACT_APP_API_URL}/shifts/simple-list`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-    console.log('✅ Shifts API response:', res.status);
-    console.log('📊 Shifts data:', res.data);
-    
-    // 🔍 DEBUG: Check assigned staff for each shift
-    res.data.data?.forEach((shift, index) => {
-      console.log(`Shift ${index + 1}:`, {
-        id: shift._id,
-        location: shift.location?.name,
-        requiredSkill: shift.requiredSkill,
-        assignedStaff: shift.assignedStaff,
-        assignedCount: shift.assignedStaff?.length || 0
+    if (!authLoading && user && token) {
+      console.log("✅ CONDITIONS MET - calling fetchAllData");
+      fetchAllData();
+    } else {
+      console.log("⏳ Conditions not met:", {
+        authLoadingDone: !authLoading,
+        hasUser: !!user,
+        hasToken: !!token,
       });
-    });
-    
-    setShifts(res.data.data || []);
-  } catch (error) {
-    console.error('❌ Error in fetchShifts:', error.message);
-    if (error.response) {
-      console.error('❌ Response data:', error.response.data);
-      console.error('❌ Response status:', error.response.status);
     }
-  }
-};
+  }, [authLoading, user, token]);
+
+  const fetchAllData = async () => {
+    console.log("🟢🟢🟢🟢🟢 FETCH ALL DATA STARTED 🟢🟢🟢🟢🟢");
+    setLoading(true);
+    try {
+      await Promise.all([
+        fetchShifts(),
+        fetchStaff(),
+        fetchMyRequests(),
+        fetchPendingApprovals(),
+        fetchAvailableShifts(),
+      ]);
+      console.log("✅ Promise.all completed");
+    } catch (error) {
+      console.error("❌ Error in fetchAllData:", error);
+      showMessage("error", "Error loading data");
+    } finally {
+      console.log("🏁 fetchAllData finished");
+      setLoading(false);
+    }
+  };
+
+  const fetchShifts = async () => {
+    console.log("🔵🔵🔵 FETCH SHIFTS FUNCTION CALLED 🔵🔵🔵");
+    console.log("🔵 Token in fetchShifts:", token ? "yes" : "no");
+
+    try {
+      console.log("📡 Fetching shifts from API...");
+      const res = await axios.get(
+        `${process.env.REACT_APP_API_URL}/shifts/simple-list`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      console.log("✅ Shifts API response:", res.status);
+      console.log("📊 Shifts data:", res.data);
+
+      // 🔍 DEBUG: Check assigned staff for each shift
+      res.data.data?.forEach((shift, index) => {
+        console.log(`Shift ${index + 1}:`, {
+          id: shift._id,
+          location: shift.location?.name,
+          requiredSkill: shift.requiredSkill,
+          assignedStaff: shift.assignedStaff,
+          assignedCount: shift.assignedStaff?.length || 0,
+        });
+      });
+
+      setShifts(res.data.data || []);
+    } catch (error) {
+      console.error("❌ Error in fetchShifts:", error.message);
+      if (error.response) {
+        console.error("❌ Response data:", error.response.data);
+        console.error("❌ Response status:", error.response.status);
+      }
+    }
+  };
 
   const fetchStaff = async () => {
-    console.log('🟣🟣🟣 FETCH STAFF FUNCTION CALLED 🟣🟣🟣');
+    console.log("🟣🟣🟣 FETCH STAFF FUNCTION CALLED 🟣🟣🟣");
     try {
       console.log("🔍 Fetching staff...");
       const res = await axios.get(`${process.env.REACT_APP_API_URL}/users`, {
@@ -162,47 +165,78 @@ const fetchShifts = async () => {
 
   const fetchMyRequests = async () => {
     try {
+      console.log("📡 Fetching my requests...");
+      const token = localStorage.getItem("token");
       const res = await axios.get(
         `${process.env.REACT_APP_API_URL}/swaps/my-requests`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
       );
+      console.log("✅ My requests response:", res.data);
+      console.log("📊 My requests count:", res.data.data?.length);
+      console.log(
+        "📊 My requests data:",
+        JSON.stringify(res.data.data, null, 2),
+      );
+
+      // Check if the data matches the current user
+      if (res.data.data && res.data.data.length > 0) {
+        console.log("First request:", res.data.data[0]);
+        console.log("Current user ID:", user?.id);
+        console.log("Requesting staff ID:", res.data.data[0].requestingStaff);
+        console.log("Target staff ID:", res.data.data[0].targetStaff);
+      }
+
       setMyRequests(res.data.data || []);
     } catch (error) {
-      console.error("Error fetching my requests:", error);
+      console.error("❌ Error fetching my requests:", error);
+      console.error("Error response:", error.response?.data);
     }
   };
 
   const fetchPendingApprovals = async () => {
     if (!isManager) return;
     try {
+      console.log("📡 Fetching pending approvals for manager...");
+      const token = localStorage.getItem("token");
       const res = await axios.get(
         `${process.env.REACT_APP_API_URL}/swaps/pending-approvals`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
       );
+      console.log("✅ Pending approvals response:", res.data);
+      console.log("📊 Pending approvals count:", res.data.data?.length);
       setPendingRequests(res.data.data || []);
     } catch (error) {
-      console.error("Error fetching pending approvals:", error);
+      console.error("❌ Error fetching pending approvals:", error);
+      console.error("Error response:", error.response?.data);
     }
   };
 
-  const fetchAvailableShifts = async () => {
-    if (!isStaff) return;
-    try {
-      const res = await axios.get(
-        `${process.env.REACT_APP_API_URL}/swaps/available`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      setAvailableShifts(res.data.data || []);
-    } catch (error) {
-      console.error("Error fetching available shifts:", error);
-    }
-  };
+const fetchAvailableShifts = async () => {
+  if (!isStaff) return;
+  try {
+    console.log('📡 Fetching available shifts...');
+    const token = localStorage.getItem('token');
+    const res = await axios.get(
+      `${process.env.REACT_APP_API_URL}/swaps/available`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    console.log('✅ Available shifts response:', res.data);
+    
+    // The backend should already filter, but just in case:
+    const filtered = (res.data.data || []).filter(shift => 
+      !shift.assignedStaff?.includes(user?.id) && 
+      !shift.assignedStaff?.includes(user?._id)
+    );
+    
+    setAvailableShifts(filtered);
+  } catch (error) {
+    console.error("❌ Error fetching available shifts:", error);
+  }
+};
 
   const showMessage = (severity, message) => {
     setSnackbar({ open: true, severity, message });
@@ -267,7 +301,10 @@ const fetchShifts = async () => {
   const submitDropRequest = async () => {
     setSubmitting(true);
     try {
-      await axios.post(
+      console.log("📤 Submitting drop request for shift:", selectedShift._id);
+      const token = localStorage.getItem("token");
+
+      const res = await axios.post(
         `${process.env.REACT_APP_API_URL}/swaps/request`,
         {
           shiftId: selectedShift._id,
@@ -277,10 +314,15 @@ const fetchShifts = async () => {
         { headers: { Authorization: `Bearer ${token}` } },
       );
 
-      showMessage("success", "Drop request submitted successfully!");
+      console.log("✅ Drop request response:", res.data);
+      showMessage(
+        "success",
+        "Drop request submitted! Waiting for manager approval.",
+      );
       setOpenDropDialog(false);
       fetchAllData();
     } catch (error) {
+      console.error("❌ Error submitting drop request:", error);
       const message =
         error.response?.data?.message || "Failed to submit drop request";
       showMessage("error", message);
@@ -291,15 +333,23 @@ const fetchShifts = async () => {
 
   const handleApproveRequest = async (request, shift) => {
     try {
-      await axios.put(
+      console.log("🔘 Approving request:", request._id);
+      const token = localStorage.getItem("token");
+
+      const res = await axios.put(
         `${process.env.REACT_APP_API_URL}/swaps/${request._id}`,
         { status: "approved" },
         { headers: { Authorization: `Bearer ${token}` } },
       );
 
+      console.log("✅ Approve response:", res.data);
       showMessage("success", "Request approved successfully!");
+
+      // Refresh all data to remove approved request from list
       fetchAllData();
     } catch (error) {
+      console.error("❌ Error approving request:", error);
+      console.error("Error response:", error.response?.data);
       const message =
         error.response?.data?.message || "Failed to approve request";
       showMessage("error", message);
@@ -342,29 +392,30 @@ const fetchShifts = async () => {
     }
   };
 
-  const handlePickupShift = async (shift) => {
-    try {
-      await axios.post(
-        `${process.env.REACT_APP_API_URL}/swaps/request`,
-        {
-          shiftId: shift._id,
-          type: "pickup",
-          notes: "Interested in picking up this shift",
-        },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+const handlePickupShift = async (shift) => {
+  try {
+    console.log('📤 Picking up shift:', shift._id);
+    const token = localStorage.getItem('token');
+    
+    // Instead of creating a swap request, directly assign the shift
+    const res = await axios.put(
+      `${process.env.REACT_APP_API_URL}/shifts/${shift._id}/assign`,
+      { 
+        staffId: user?.id || user?._id,
+        reason: 'Picked up from available shifts'
+      },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
 
-      showMessage(
-        "success",
-        "Pickup request submitted! A manager will review it.",
-      );
-      fetchAllData();
-    } catch (error) {
-      const message =
-        error.response?.data?.message || "Failed to request pickup";
-      showMessage("error", message);
-    }
-  };
+    console.log('✅ Pickup successful:', res.data);
+    showMessage("success", "Shift picked up successfully!");
+    fetchAllData();
+  } catch (error) {
+    console.error("❌ Error picking up shift:", error);
+    const message = error.response?.data?.message || "Failed to pick up shift";
+    showMessage("error", message);
+  }
+};
 
   const getStaffName = (staffId) => {
     if (!staffId) return "Unknown";
@@ -653,32 +704,51 @@ const fetchShifts = async () => {
         )}
 
         {/* Pending Approvals Tab (Manager) */}
+        {/* Pending Approvals Tab (Manager) */}
         {showPendingApprovals && (
           <Grid container spacing={3}>
             {pendingRequests.length > 0 ? (
               pendingRequests.map((req) => (
                 <Grid size={12} key={req._id}>
-                  <Card>
+                  <Card
+                    sx={{
+                      borderLeft:
+                        req.type === "drop"
+                          ? "4px solid #ff9800"
+                          : "4px solid #2196f3",
+                    }}
+                  >
                     <CardContent>
                       <Box
                         display="flex"
                         justifyContent="space-between"
                         alignItems="center"
                       >
-                        <Typography variant="subtitle1">
-                          {req.type === "swap"
-                            ? "Swap Request"
-                            : "Drop Request"}
-                        </Typography>
-                        <Chip label={req.status} size="small" color="warning" />
+                        <Box display="flex" alignItems="center" gap={1}>
+                          {req.type === "drop" ? (
+                            <DropIcon color="warning" />
+                          ) : (
+                            <SwapIcon color="primary" />
+                          )}
+                          <Typography variant="subtitle1">
+                            {req.type === "swap"
+                              ? "Swap Request"
+                              : "Drop Request"}
+                          </Typography>
+                        </Box>
+                        <Chip
+                          label={req.type === "drop" ? "DROP" : "SWAP"}
+                          size="small"
+                          color={req.type === "drop" ? "warning" : "info"}
+                        />
                       </Box>
                       <Typography variant="body2" sx={{ mt: 1 }}>
                         <strong>From:</strong>{" "}
                         {getStaffName(req.requestingStaff)}
                       </Typography>
-                      {req.targetStaff && (
-                        <Typography variant="body2">
-                          <strong>With:</strong> {getStaffName(req.targetStaff)}
+                      {req.type === "drop" && (
+                        <Typography variant="body2" color="warning.main">
+                          <strong>⚠️ Staff wants to drop this shift</strong>
                         </Typography>
                       )}
                       <Typography variant="body2">

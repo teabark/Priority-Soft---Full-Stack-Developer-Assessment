@@ -21,6 +21,13 @@ const Shifts = () => {
   const [openForm, setOpenForm] = useState(false);
   const [editShift, setEditShift] = useState(null);
   const { user } = useAuth();
+  
+  // Debug logs
+  console.log("🔍 Raw user from auth:", user);
+  console.log("🔍 User role:", user?.role);
+  console.log("🔍 User ID:", user?.id);
+  console.log("🔍 User _id:", user?._id);
+  
   const [stats, setStats] = useState({
     total: 0,
     published: 0,
@@ -30,10 +37,15 @@ const Shifts = () => {
 
   const isManager = user?.role === "admin" || user?.role === "manager";
   const isStaff = user?.role === "staff";
+  
+  console.log("🔍 isStaff:", isStaff);
+  console.log("🔍 isManager:", isManager);
 
-  useEffect(() => {
+useEffect(() => {
+  if (user) {
     fetchShifts();
-  }, []);
+  }
+}, [user]);
 
   const fetchShifts = async () => {
     try {
@@ -65,16 +77,28 @@ const Shifts = () => {
             })),
           );
 
-          filteredShifts = res.data.data.filter((shift) =>
-            shift.assignedStaff?.some((s) => {
-              const staffId = s._id || s;
-              const match = staffId === user?.id || staffId === user?._id;
-              if (match) console.log("✅ Match found for shift:", shift._id);
-              return match;
-            }),
-          );
+          filteredShifts = res.data.data.filter((shift) => {
+            console.log(`\n🔍 Checking shift ${shift._id}:`);
+            console.log(`   assignedStaff:`, shift.assignedStaff);
+            console.log(`   user.id: ${user?.id}`);
+            console.log(`   user._id: ${user?._id}`);
 
-          console.log("📊 Filtered shifts:", filteredShifts.length);
+            const hasMatch = shift.assignedStaff?.some((s) => {
+              // s is already the ID string, not an object
+              const staffId = s._id || s.id || s;
+              console.log(
+                `      Comparing: staffId=${staffId} with user.id=${user?.id} and user._id=${user?._id}`,
+              );
+              const match = staffId === user?.id || staffId === user?._id;
+              if (match) console.log(`      ✅ MATCH!`);
+              return match;
+            });
+
+            console.log(`   Result: ${hasMatch ? "KEEP" : "FILTER OUT"}`);
+            return hasMatch;
+          });
+
+          console.log("📊 Filtered shifts count:", filteredShifts.length);
         }
 
         setShifts(filteredShifts);

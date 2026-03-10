@@ -1,8 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { io } from 'socket.io-client';
-import { useAuth } from './AuthContext';
-import { toast } from 'react-toastify';
-import axios from 'axios';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
+import { io } from "socket.io-client";
+import { useAuth } from "./AuthContext";
+import { toast } from "react-toastify";
+import axios from "axios";
 
 const NotificationContext = createContext();
 
@@ -19,41 +25,45 @@ export const NotificationProvider = ({ children }) => {
   // Fetch notifications from API
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
-    
+
     try {
-      const res = await axios.get(`${process.env.REACT_APP_API_URL}/notifications`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await axios.get(
+        `${process.env.REACT_APP_API_URL}/notifications`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
       setNotifications(res.data.data || []);
       setUnreadCount(res.data.unreadCount || 0);
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      console.error("Error fetching notifications:", error);
     } finally {
       setLoading(false);
     }
   }, [user, token]);
 
-  useEffect(() => {
-    if (user && token) {
-      fetchNotifications();
-      connectSocket();
-    } else {
-      setNotifications([]);
-      setUnreadCount(0);
-      if (socket) {
-        socket.disconnect();
-        setSocket(null);
-      }
+useEffect(() => {
+  if (user && token) {
+    fetchNotifications();
+    connectSocket();
+  } else {
+    setNotifications([]);
+    setUnreadCount(0);
+    if (socket) {
+      socket.disconnect();
+      setSocket(null);
     }
+  }
 
-    return () => {
-      if (socket) {
-        socket.disconnect();
-      }
-    };
-  }, [user, token, fetchNotifications]);
+  return () => {
+    if (socket) {
+      socket.disconnect();
+    }
+  };
+}, [user, token, fetchNotifications]);
 
-  const connectSocket = () => {
+const connectSocket = () => {
+  try {
     const newSocket = io(process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000', {
       auth: { token },
       transports: ['websocket'],
@@ -72,49 +82,50 @@ export const NotificationProvider = ({ children }) => {
       setConnected(false);
     });
 
+    newSocket.on('connect_error', (error) => {
+      console.error('❌ Socket connection error:', error);
+    });
+
     newSocket.on('notification:new', (data) => {
       console.log('📢 New notification:', data);
       
-      // Add to notifications list
+      if (!data || !data.message) {
+        console.warn('⚠️ Received invalid notification:', data);
+        return;
+      }
+      
       setNotifications(prev => [data, ...prev]);
       setUnreadCount(prev => prev + 1);
 
-      // Show toast notification
       toast.info(
         <div>
-          <strong>{data.title}</strong>
+          <strong>{data.title || 'Notification'}</strong>
           <p>{data.message}</p>
         </div>,
-        {
-          position: "top-right",
-          autoClose: 5000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        }
+        { position: "top-right", autoClose: 5000 }
       );
     });
 
     setSocket(newSocket);
-  };
+  } catch (error) {
+    console.error('❌ Error creating socket connection:', error);
+  }
+};
 
   const markAsRead = async (notificationId) => {
     try {
       await axios.put(
         `${process.env.REACT_APP_API_URL}/notifications/${notificationId}/read`,
         {},
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` } },
       );
 
-      setNotifications(prev =>
-        prev.map(n =>
-          n._id === notificationId ? { ...n, read: true } : n
-        )
+      setNotifications((prev) =>
+        prev.map((n) => (n._id === notificationId ? { ...n, read: true } : n)),
       );
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      console.error("Error marking notification as read:", error);
     }
   };
 
@@ -123,15 +134,13 @@ export const NotificationProvider = ({ children }) => {
       await axios.put(
         `${process.env.REACT_APP_API_URL}/notifications/read-all`,
         {},
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` } },
       );
 
-      setNotifications(prev =>
-        prev.map(n => ({ ...n, read: true }))
-      );
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       setUnreadCount(0);
     } catch (error) {
-      console.error('Error marking all as read:', error);
+      console.error("Error marking all as read:", error);
     }
   };
 
@@ -143,7 +152,7 @@ export const NotificationProvider = ({ children }) => {
     loading,
     markAsRead,
     markAllAsRead,
-    refresh: fetchNotifications
+    refresh: fetchNotifications,
   };
 
   return (

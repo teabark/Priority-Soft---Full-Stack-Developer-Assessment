@@ -174,14 +174,32 @@ const ScheduleCalendar = () => {
     return 'draft';
   };
 
-  const handlePublishWeek = () => {
-    if (!canEditWeek()) {
-      setCutoffWarning(true);
-      return;
-    }
-    setSelectedWeek(getWeekStart());
-    setPublishDialog(true);
-  };
+const handlePublishWeek = () => {
+  console.log('📅 Publish week clicked');
+  console.log('📅 canEditWeek:', canEditWeek());
+  console.log('📅 weekStatus:', weekStatus);
+  
+  if (!canEditWeek()) {
+    console.log('⛔ Cannot publish - within 48-hour cutoff');
+    setCutoffWarning(true);
+    return;
+  }
+  setSelectedWeek(getWeekStart());
+  setPublishDialog(true);
+};
+
+const handleUnpublishWeek = () => {
+  console.log('📅 Unpublish week clicked');
+  console.log('📅 canEditWeek:', canEditWeek());
+  
+  if (!canEditWeek()) {
+    console.log('⛔ Cannot unpublish - within 48-hour cutoff');
+    setCutoffWarning(true);
+    return;
+  }
+  setSelectedWeek(getWeekStart());
+  setUnpublishDialog(true);
+};
 
   const handleUnpublishWeek = () => {
     if (!canEditWeek()) {
@@ -191,6 +209,8 @@ const ScheduleCalendar = () => {
     setSelectedWeek(getWeekStart());
     setUnpublishDialog(true);
   };
+
+  
 
   const confirmPublish = async () => {
     try {
