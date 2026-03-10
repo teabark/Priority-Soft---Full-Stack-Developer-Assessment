@@ -15,7 +15,7 @@ import {
   Menu,
   MenuItem,
   Divider,
-  Badge
+  Badge,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -25,7 +25,8 @@ import {
   LocationOn as LocationIcon,
   People as PeopleIcon,
   Notifications as NotificationsIcon,
-  ExitToApp as LogoutIcon
+  ExitToApp as LogoutIcon,
+  SwapHoriz as SwapHorizIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -61,6 +62,7 @@ const Layout = ({ children }) => {
     { text: 'Schedule', icon: <CalendarIcon />, path: '/schedule' },
     { text: 'Locations', icon: <LocationIcon />, path: '/locations' },
     { text: 'Staff', icon: <PeopleIcon />, path: '/staff' },
+    { text: 'Swap Requests', icon: <SwapHorizIcon />, path: '/swaps' }
   ];
 
   const drawer = (

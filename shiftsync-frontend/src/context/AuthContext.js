@@ -38,7 +38,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await axios.get(`${process.env.REACT_APP_API_URL}/auth/me`);
       setUser(res.data.data);
-      localStorage.setItem("user", JSON.stringify(res.data.data));
+      localStorage.setItem("user", JSON.stringify(res.data.data)); // Save user to localStorage
     } catch (error) {
       console.error("Load user error:", error);
       logout();
@@ -55,18 +55,6 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token, loadUser]);
 
-  // Try to get user from localStorage on initial load if context doesn't have it
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser && !user) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error('Error parsing stored user:', e);
-      }
-    }
-  }, [user]);
-
   const login = async (email, password) => {
     try {
       console.log('🔍 Login attempt starting...');
@@ -82,7 +70,7 @@ export const AuthProvider = ({ children }) => {
       
       // Save to localStorage
       localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem('user', JSON.stringify(user)); // Save user to localStorage
       console.log('💾 Token and user saved to localStorage');
       
       // Set axios default header
@@ -98,17 +86,8 @@ export const AuthProvider = ({ children }) => {
       toast.success(`Welcome back, ${user.name}!`);
       console.log('📢 Toast notification shown');
       
-      // Try React Router navigate first
-      console.log('➡️ Attempting React Router navigation to /');
+      // Navigate to dashboard
       navigate('/');
-      
-      // Fallback: Force redirect after a short delay if React Router fails
-      setTimeout(() => {
-        if (window.location.pathname !== '/') {
-          console.log('⚠️ React Router navigation failed, forcing redirect');
-          window.location.href = '/';
-        }
-      }, 500);
       
       return { success: true };
     } catch (error) {
