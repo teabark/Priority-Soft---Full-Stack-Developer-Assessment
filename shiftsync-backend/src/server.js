@@ -186,6 +186,14 @@ app.use((req, res) => {
   });
 });
 
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 // TEMPORARY - Simple shifts endpoint for managers
 app.get('/api/manager-shifts', async (req,res) => {
   try {
