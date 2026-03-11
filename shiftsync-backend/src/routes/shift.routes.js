@@ -166,19 +166,53 @@ router.post(
   authorize("admin", "manager"),
   validateShiftCreate,
   handleValidationErrors,
-  async (req, res, next) => {
+  async (req, res) => {
     try {
       console.log("📤 Creating new shift with data:", req.body);
       
-      const shiftData = {
-        ...req.body,
-        createdBy: req.user.id
-      };
+      // Get location to get its timezone
+      const Location = mongoose.model('Location');
+      const location = await Location.findById(req.body.location);
       
+      if (!location) {
+        return res.status(400).json({
+          success: false,
+          message: 'Location not found'
+        });
+      }
+      
+      // Calculate editCutoff (48 hours before shift start)
+      const startDateTime = new Date(req.body.startTime);
+      const editCutoffDate = new Date(startDateTime);
+      editCutoffDate.setHours(editCutoffDate.getHours() - 48);
+      
+      const shiftData = {
+        location: req.body.location,
+        date: req.body.date,
+        startTime: req.body.startTime,
+        endTime: req.body.endTime,
+        duration: req.body.duration || 
+          Math.round((new Date(req.body.endTime) - new Date(req.body.startTime)) / (1000 * 60)),
+        requiredSkill: req.body.requiredSkill,
+        requiredCount: req.body.requiredCount,
+        assignedStaff: req.body.assignedStaff || [],
+        managerNotes: req.body.managerNotes || "",
+        status: req.body.status || "draft",
+        createdBy: req.user.id,
+        editCutoff: editCutoffDate,
+        locationTimezone: location.timezone, // Store the timezone
+        isPremiumShift: req.body.isPremiumShift || false,
+        swapRequests: [],
+        complianceWarnings: [],
+        history: [],
+        assignmentHistory: []
+      };
+
+      console.log("📤 Shift data with timezone:", shiftData.locationTimezone);
+
       const shift = await Shift.create(shiftData);
       console.log("✅ Shift created:", shift._id);
       
-      // ===== ADD NOTIFICATIONS HERE =====
       // If staff were assigned during creation, notify them
       if (shift.assignedStaff && shift.assignedStaff.length > 0) {
         const notificationHelper = req.app.get('notificationHelper');
@@ -193,7 +227,6 @@ router.post(
           }
         }
       }
-      // ==================================
       
       res.status(201).json({
         success: true,
@@ -208,7 +241,6 @@ router.post(
     }
   }
 );
-
 router.get("/", getShifts);
 router.get("/:id", getShift);
 
@@ -330,6 +362,7 @@ router.delete(
     }
   }
 );
+
 
 // Staff assignment
 router.post(
