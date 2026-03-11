@@ -35,6 +35,53 @@ router.put(
   updatePreferences
 );
 
+// TEMPORARY TEST ENDPOINT
+router.post('/test', protect, async (req, res) => {
+  console.log('='.repeat(50));
+  console.log('🔔 TEST NOTIFICATION ENDPOINT HIT');
+  console.log('='.repeat(50));
+  
+  try {
+    console.log('📌 User:', req.user.id);
+    
+    const Notification = require('../models/Notification');
+    
+    const notification = new Notification({
+      recipient: req.user.id,
+      type: 'system_alert',
+      title: '🔔 Test Notification',
+      message: 'Your notification system is working!',
+      priority: 'normal',
+      channels: ['in_app']
+    });
+    
+    console.log('📌 Saving notification...');
+    await notification.save();
+    console.log('✅ Notification saved:', notification._id);
+    
+    // Send real-time
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${req.user.id}`).emit('notification:new', {
+        _id: notification._id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        data: notification.data,
+        createdAt: notification.createdAt,
+        read: false
+      });
+      console.log('📢 Real-time notification sent');
+    }
+    
+    res.json({ success: true, data: notification });
+    
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // @desc    Get user notifications
 // @route   GET /api/notifications
 // @access  Private

@@ -68,7 +68,7 @@ router.post('/check-assignment', protect, authorize('admin', 'manager'), async (
 router.get('/staff/:staffId/weekly', protect, authorize('admin', 'manager'), async (req, res) => {
   try {
     const { staffId } = req.params;
-    const { date } = req.query; // Optional date parameter
+    const { date } = req.query;
     
     console.log('🔍 Getting weekly hours for staff:', staffId);
 
@@ -86,6 +86,9 @@ router.get('/staff/:staffId/weekly', protect, authorize('admin', 'manager'), asy
     // Get staff details
     const staff = await User.findById(staffId).select('name email');
 
+    // Ensure shifts is an array before mapping
+    const shiftsArray = weekly.shifts || [];
+    
     res.json({
       success: true,
       data: {
@@ -93,8 +96,8 @@ router.get('/staff/:staffId/weekly', protect, authorize('admin', 'manager'), asy
         weekStart: weekly.weekStart,
         weekEnd: weekly.weekEnd,
         weeklyHours: weekly.weeklyHours,
-        shiftCount: weekly.shifts.length,
-        shifts: weekly.shifts.map(s => ({
+        shiftCount: shiftsArray.length,
+        shifts: shiftsArray.map(s => ({
           id: s._id,
           date: s.startTime,
           location: s.location,
@@ -211,12 +214,9 @@ router.get('/staff/:staffId/consecutive-days', protect, authorize('admin', 'mana
 // @access  Private (Managers, Admins)
 router.get('/dashboard', protect, authorize('admin', 'manager'), async (req, res) => {
   try {
-    console.log('='.repeat(50));
-    console.log('🔍 DASHBOARD ROUTE HIT');
-    console.log('='.repeat(50));
+    console.log('🔍 Getting overtime dashboard for manager:', req.user.id);
 
     const service = req.app.get('overtimeService');
-    
     if (!service) {
       return res.status(500).json({ 
         success: false, 
@@ -237,20 +237,29 @@ router.get('/dashboard', protect, authorize('admin', 'manager'), async (req, res
     
     console.log('📌 Location IDs:', locationIds);
 
-    // Use the existing method that actually exists
-    // Change this line from:
-    // const dashboardData = await service.getDashboardData(req.user.id, locationIds);
-    
-    // To this (use the method that exists):
+    // Call the service method
     const dashboardData = await service.getLocationOvertimeReport(req.user.id, locationIds);
     
+    // Ensure the data structure is correct
+    const responseData = {
+      totalOvertimeCost: dashboardData.totalOvertimeCost || 0,
+      atRiskStaff: Array.isArray(dashboardData.atRiskStaff) ? dashboardData.atRiskStaff : [],
+      warnings: Array.isArray(dashboardData.warnings) ? dashboardData.warnings : [],
+      weeklySummary: Array.isArray(dashboardData.weeklySummary) ? dashboardData.weeklySummary : []
+    };
+    
+    console.log('✅ Dashboard data prepared:', {
+      atRiskCount: responseData.atRiskStaff.length,
+      warningsCount: responseData.warnings.length
+    });
+
     res.json({
       success: true,
-      data: dashboardData
+      data: responseData
     });
 
   } catch (error) {
-    console.error('❌ ERROR:', error);
+    console.error('❌ Error in dashboard route:', error);
     res.status(500).json({ 
       success: false, 
       message: error.message 

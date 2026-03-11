@@ -242,11 +242,6 @@ notificationSchema.index({ 'relatedTo.model': 1, 'relatedTo.id': 1 });
 notificationSchema.index({ groupKey: 1, recipient: 1 });
 notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL index
 
-// Update timestamp on save
-notificationSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
-});
 
 // Virtual for time since creation
 notificationSchema.virtual('timeAgo').get(function() {

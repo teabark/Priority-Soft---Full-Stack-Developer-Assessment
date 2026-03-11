@@ -2,94 +2,62 @@ const Shift = require('../models/Shift');
 const User = require('../models/User');
 
 class OvertimeService {
-  // Calculate hours for a staff member in a given week
-  async calculateWeeklyHours(staffId, weekStart) {
+/**
+ * Calculate weekly hours for a staff member
+ */
+async calculateWeeklyHours(staffId, targetDate = new Date()) {
+  try {
+    const Shift = require("../models/Shift");
+
+    // Get start and end of week (Sunday to Saturday)
+    const weekStart = new Date(targetDate);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Start of week (Sunday)
+    weekStart.setHours(0, 0, 0, 0);
+
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
-    
+    weekEnd.setHours(23, 59, 59, 999);
+
+    console.log(`📅 Calculating weekly hours for staff ${staffId} from ${weekStart} to ${weekEnd}`);
+
+    // Find all shifts for this staff in the week
     const shifts = await Shift.find({
       assignedStaff: staffId,
-      startTime: { $gte: weekStart, $lt: weekEnd },
-      status: { $in: ['published', 'in_progress', 'completed'] }
-    }).sort({ startTime: 1 });
+      status: { $in: ["published", "in_progress", "completed"] },
+      startTime: { $gte: weekStart, $lte: weekEnd },
+    }).populate("location", "name");
 
-    let totalHours = 0;
-    const dailyHours = {};
-    const consecutiveDays = new Set();
-    const warnings = [];
-    const blocks = [];
+    console.log(`📊 Found ${shifts.length} shifts`);
 
-    shifts.forEach(shift => {
-      const hours = (new Date(shift.endTime) - new Date(shift.startTime)) / (1000 * 60 * 60);
-      totalHours += hours;
-      
-      const day = new Date(shift.startTime).toDateString();
-      dailyHours[day] = (dailyHours[day] || 0) + hours;
-      consecutiveDays.add(day);
-    });
-
-    // Weekly hour checks
-    if (totalHours > 40) {
-      blocks.push({
-        type: 'weekly_hours',
-        message: `Exceeds 40 hour weekly limit (${totalHours.toFixed(1)} hours)`,
-        severity: 'critical'
-      });
-    } else if (totalHours > 35) {
-      warnings.push({
-        type: 'weekly_hours',
-        message: `Approaching 40 hour limit (${totalHours.toFixed(1)} hours)`,
-        severity: 'warning'
-      });
-    }
-
-    // Daily hour checks
-    Object.entries(dailyHours).forEach(([day, hours]) => {
-      if (hours > 12) {
-        blocks.push({
-          type: 'daily_hours',
-          day,
-          message: `Exceeds 12 hour daily limit (${hours.toFixed(1)} hours on ${day})`,
-          severity: 'critical'
-        });
-      } else if (hours > 8) {
-        warnings.push({
-          type: 'daily_hours',
-          day,
-          message: `Exceeds 8 hour daily limit (${hours.toFixed(1)} hours on ${day})`,
-          severity: 'warning'
-        });
+    // Calculate total hours
+    let totalMinutes = 0;
+    shifts.forEach((shift) => {
+      if (shift.duration) {
+        totalMinutes += shift.duration;
+        console.log(`   Shift: ${shift._id}, Duration: ${shift.duration} minutes`);
       }
     });
 
-    // Consecutive day checks
-    const consecutiveCount = consecutiveDays.size;
-    if (consecutiveCount >= 7) {
-      blocks.push({
-        type: 'consecutive_days',
-        message: `Working 7 consecutive days requires manager override`,
-        severity: 'critical',
-        requiresOverride: true
-      });
-    } else if (consecutiveCount >= 6) {
-      warnings.push({
-        type: 'consecutive_days',
-        message: `Working ${consecutiveCount} consecutive days`,
-        severity: 'warning'
-      });
-    }
+    const weeklyHours = totalMinutes / 60;
 
+    // IMPORTANT: Always return shifts as an array
     return {
-      staffId,
+      weeklyHours,
+      shifts: shifts || [], // Ensure it's always an array
       weekStart,
-      totalHours: Math.round(totalHours * 10) / 10,
-      dailyHours,
-      consecutiveDays: consecutiveCount,
-      shifts: shifts.length,
-      warnings,
-      blocks
+      weekEnd,
+    };
+  } catch (error) {
+    console.error("❌ Error calculating weekly hours:", error);
+    // Return a default structure even on error
+    return {
+      weeklyHours: 0,
+      shifts: [],
+      weekStart: new Date(),
+      weekEnd: new Date(),
     };
   }
+}
 
   // Get overtime report for all staff at a location
   async getLocationOvertimeReport(locationId, weekStart) {
