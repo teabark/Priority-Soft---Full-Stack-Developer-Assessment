@@ -116,6 +116,38 @@ router.post('/test', protect, async (req, res) => {
 //   }
 // });
 
+// TEMPORARY - Direct test endpoint
+router.post('/test-direct', protect, async (req, res) => {
+  try {
+    const { targetUserId, message } = req.body;
+    const Notification = require('../models/Notification');
+    
+    const notification = await Notification.create({
+      recipient: targetUserId,
+      type: 'system_alert',
+      title: '🔔 Direct Test',
+      message: message || 'Direct notification test',
+      priority: 'normal',
+      channels: ['in_app']
+    });
+
+    const io = req.app.get('io');
+    io.to(`user:${targetUserId}`).emit('notification:new', {
+      _id: notification._id,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      data: notification.data,
+      createdAt: notification.createdAt,
+      read: false
+    });
+
+    res.json({ success: true, data: notification });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // Summary route
 router.get('/summary', getNotificationSummary);
 

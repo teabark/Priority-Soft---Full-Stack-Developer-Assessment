@@ -48,13 +48,22 @@ const getNotifications = async (req, res) => {
     
     const total = await Notification.countDocuments(query);
     
+    // ===== ADD THIS - Calculate unread count =====
+    const unreadCount = await Notification.countDocuments({
+      recipient: req.user.id,
+      read: false,
+      status: { $ne: 'archived' }
+    });
+    // =============================================
+    
     res.status(200).json({
       success: true,
       count: notifications.length,
       total,
       page: parseInt(page),
       pages: Math.ceil(total / parseInt(limit)),
-      data: notifications
+      data: notifications,
+      unreadCount: unreadCount // ADD THIS LINE
     });
   } catch (error) {
     res.status(400).json({
@@ -131,13 +140,24 @@ const markAsRead = async (req, res) => {
       });
     }
     
-    await notification.markAsRead(req.body.channel || 'in_app');
+    // Use the model method if it exists
+    if (typeof notification.markAsRead === 'function') {
+      await notification.markAsRead(req.body.channel || 'in_app');
+    } else {
+      // Fallback if method doesn't exist
+      notification.read = true;
+      notification.readAt = new Date();
+      notification.status = 'read';
+      await notification.save();
+    }
     
     // Emit real-time update
     const io = req.app.get('io');
-    io.to(`user-${req.user.id}`).emit('notificationRead', {
-      notificationId: notification._id
-    });
+    if (io) {
+      io.to(`user:${req.user.id}`).emit('notificationRead', {
+        notificationId: notification._id
+      });
+    }
     
     res.status(200).json({
       success: true,

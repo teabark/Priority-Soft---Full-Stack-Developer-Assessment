@@ -3,6 +3,7 @@ const http = require('http');
 const mongoose = require('mongoose');
 
 const app = require('./config/app');
+const NotificationHelper = require('./services/notification.helper');
 const connectDB = require('./config/database');
 const setupSocket = require('./socket');
 const { errorHandler } = require('./middleware/errorHandler');
@@ -21,6 +22,10 @@ console.log('✅ Socket.io initialized');
 // Make io accessible to routes and controllers
 app.set('io', io);
 console.log('✅ io set in app');
+
+const notificationHelper = new NotificationHelper(io);
+app.set('notificationHelper', notificationHelper);
+console.log('✅ NotificationHelper initialized');
 
 // ===== ADDED: Initialize NotificationService and make it available to routes =====
 const NotificationService = require('./services/notification.service');

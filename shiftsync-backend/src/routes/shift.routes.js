@@ -166,7 +166,47 @@ router.post(
   authorize("admin", "manager"),
   validateShiftCreate,
   handleValidationErrors,
-  createShift,
+  async (req, res, next) => {
+    try {
+      console.log("📤 Creating new shift with data:", req.body);
+      
+      const shiftData = {
+        ...req.body,
+        createdBy: req.user.id
+      };
+      
+      const shift = await Shift.create(shiftData);
+      console.log("✅ Shift created:", shift._id);
+      
+      // ===== ADD NOTIFICATIONS HERE =====
+      // If staff were assigned during creation, notify them
+      if (shift.assignedStaff && shift.assignedStaff.length > 0) {
+        const notificationHelper = req.app.get('notificationHelper');
+        console.log(`📢 Sending assignment notifications to ${shift.assignedStaff.length} staff`);
+        
+        for (const staffId of shift.assignedStaff) {
+          try {
+            await notificationHelper.notifyShiftAssigned(shift, staffId, req.user.id);
+            console.log(`✅ Notification sent to staff ${staffId}`);
+          } catch (notifError) {
+            console.error(`❌ Failed to notify staff ${staffId}:`, notifError);
+          }
+        }
+      }
+      // ==================================
+      
+      res.status(201).json({
+        success: true,
+        data: shift
+      });
+    } catch (error) {
+      console.error("❌ Error creating shift:", error);
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
 );
 
 router.get("/", getShifts);
@@ -178,7 +218,59 @@ router.put(
   checkLocationAccess,
   validateShiftUpdate,
   handleValidationErrors,
-  updateShift,
+  async (req, res, next) => {
+    try {
+      const shift = await Shift.findById(req.params.id);
+      if (!shift) {
+        return res.status(404).json({
+          success: false,
+          message: "Shift not found"
+        });
+      }
+
+      // Track old assigned staff to detect new additions
+      const oldAssignedStaff = shift.assignedStaff.map(id => id.toString());
+      
+      // Update shift
+      Object.assign(shift, req.body);
+      shift.updatedBy = req.user.id;
+      await shift.save();
+      
+      console.log("✅ Shift updated:", shift._id);
+      
+      // ===== NOTIFY NEWLY ADDED STAFF =====
+      const newAssignedStaff = shift.assignedStaff.map(id => id.toString());
+      const addedStaff = newAssignedStaff.filter(
+        id => !oldAssignedStaff.includes(id)
+      );
+      
+      if (addedStaff.length > 0) {
+        const notificationHelper = req.app.get('notificationHelper');
+        console.log(`📢 Sending notifications to ${addedStaff.length} newly assigned staff`);
+        
+        for (const staffId of addedStaff) {
+          try {
+            await notificationHelper.notifyShiftAssigned(shift, staffId, req.user.id);
+            console.log(`✅ Notification sent to staff ${staffId}`);
+          } catch (notifError) {
+            console.error(`❌ Failed to notify staff ${staffId}:`, notifError);
+          }
+        }
+      }
+      // ====================================
+      
+      res.json({
+        success: true,
+        data: shift
+      });
+    } catch (error) {
+      console.error("❌ Error updating shift:", error);
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
 );
 
 // Staff assignment
@@ -190,6 +282,74 @@ router.post(
   handleValidationErrors,
   assignStaff,
 );
+
+// @desc    Assign staff to a shift (including pickups)
+// @route   PUT /api/shifts/:shiftId/assign
+// @access  Private
+router.put('/:shiftId/assign', protect, async (req, res) => {
+  try {
+    const { shiftId } = req.params;
+    const { staffId, reason } = req.body;
+    
+    console.log('🔍 Assign endpoint called:', { shiftId, staffId, reason });
+
+    const shift = await Shift.findById(shiftId).populate('location');
+    
+    if (!shift) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Shift not found' 
+      });
+    }
+
+    // ... validation checks ...
+
+    // Add staff to assignedStaff
+    shift.assignedStaff.push(staffId);
+    
+    // Mark as no longer available for pickup
+    shift.availableForPickup = false;
+    shift.needsCoverage = false;
+    
+    await shift.save();
+    
+    console.log('✅ Shift saved successfully');
+
+    // ===== DEBUG NOTIFICATION =====
+    console.log('📢 Attempting to send notification...');
+    console.log('📢 Shift ID:', shift._id);
+    console.log('📢 Staff ID:', staffId);
+    console.log('📢 Assigned By:', req.user.id);
+    
+    const notificationHelper = req.app.get('notificationHelper');
+    console.log('📢 Notification helper found:', !!notificationHelper);
+    
+    if (notificationHelper) {
+      try {
+        const result = await notificationHelper.notifyShiftAssigned(shift, staffId, req.user.id);
+        console.log('✅ Notification helper result:', result ? 'Success' : 'Failed');
+      } catch (notifError) {
+        console.error('❌ Notification helper error:', notifError);
+      }
+    } else {
+      console.log('❌ Notification helper not found in app');
+    }
+    // ================================
+
+    res.json({
+      success: true,
+      data: shift,
+      message: 'Shift picked up successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Error in assign endpoint:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
 
 // Staff picking up available shifts (different from manager assignment)
 router.put(

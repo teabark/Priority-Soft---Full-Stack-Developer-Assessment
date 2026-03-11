@@ -82,37 +82,27 @@ router.post("/request", protect, async (req, res) => {
     user.pendingRequests.requestIds.push(swapRequest._id);
     await user.save();
 
-    // Get notification service
-    const notificationService = req.app.get("notificationService");
+    // ========== USE NOTIFICATION HELPER ==========
+    const notificationHelper = req.app.get("notificationHelper");
     const Location = mongoose.model("Location");
     const location = await Location.findById(shift.location);
 
-    // ========== NOTIFICATIONS ==========
-    // 1. Notify target staff (for swap)
+    // 1. Notify target staff (for swap) using the helper
     if (type === "swap" && targetStaffId) {
-      await notificationService.sendToUser(targetStaffId, {
-        sender: req.user.id,
-        type: "swap_received",
-        title: "🔄 New Swap Request",
-        message: `${req.user.name} wants to swap shifts with you`,
-        relatedTo: { model: "Shift", id: shift._id },
-        data: { swapRequestId: swapRequest._id, shiftId: shift._id },
-      });
-      console.log(`📢 Notification sent to target staff: ${targetStaffId}`);
+      await notificationHelper.notifySwapRequested(
+        swapRequest,
+        shift,
+        req.user.id,
+        targetStaffId
+      );
     }
 
-    // 2. Notify managers at this location (for approval)
+    // 2. Notify managers at this location (for approval) using the helper
     if (location && location.managers && location.managers.length > 0) {
-      await notificationService.sendToUsers(location.managers, {
-        sender: req.user.id,
-        type: "swap_pending_approval",
-        title: "⚠️ Swap Request Needs Approval",
-        message: `${req.user.name} has requested a swap`,
-        relatedTo: { model: "Shift", id: shift._id },
-        data: { swapRequestId: swapRequest._id, shiftId: shift._id },
-      });
-      console.log(
-        `📢 Notification sent to ${location.managers.length} managers`,
+      await notificationHelper.notifyManagersSwapPending(
+        shift,
+        swapRequest,
+        req.user.id
       );
     }
 
@@ -287,113 +277,55 @@ router.get("/pending-approvals", protect, async (req, res) => {
 // @access  Private (Manager/Admin or Target Staff for swaps)
 router.put("/:requestId", protect, async (req, res) => {
   try {
-    const { status, reason } = req.body; // status: 'approved', 'rejected', or 'accepted'
+    const { status, reason } = req.body;
     const { requestId } = req.params;
 
-    // Find shift containing this request
     const shift = await Shift.findOne({
-      "swapRequests._id": requestId,
-    }).populate("swapRequests.requestingStaff", "name email");
+      'swapRequests._id': requestId
+    }).populate('swapRequests.requestingStaff', 'name email');
 
     if (!shift) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Request not found" });
+      return res.status(404).json({ success: false, message: 'Request not found' });
     }
 
-    // Find the specific request
     const request = shift.swapRequests.id(requestId);
     if (!request) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Request not found" });
+      return res.status(404).json({ success: false, message: 'Request not found' });
     }
 
-    // Check permissions
-    const isManager = req.user.role === "admin" || req.user.role === "manager";
+    const isManager = req.user.role === 'admin' || req.user.role === 'manager';
     const isTargetStaff = request.targetStaff?.toString() === req.user.id;
 
     if (!isManager && !isTargetStaff) {
-      return res
-        .status(403)
-        .json({ success: false, message: "Not authorized" });
+      return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
-    // ===== FIX: Get notification service with error handling =====
-    const notificationService = req.app.get("notificationService");
-    if (!notificationService) {
-      console.error("❌ notificationService not found in app!");
-      // Continue without notifications rather than crashing
-    }
-
-    const io = req.app.get("io");
-    const Location = mongoose.model("Location");
+    const notificationHelper = req.app.get('notificationHelper');
+    const Location = mongoose.model('Location');
     const location = await Location.findById(shift.location);
-    // ============================================================
 
-    // ========== CASE 1: TARGET STAFF ACCEPTS THE SWAP ==========
-    if (request.type === "swap" && isTargetStaff && status === "accepted") {
-      // Target staff accepts - status remains pending for manager approval
-      request.status = "pending_approval"; // Still pending manager approval
+    // Target staff accepts the swap
+    if (request.type === 'swap' && isTargetStaff && status === 'accepted') {
+      request.status = 'pending_approval';
       request.history.push({
-        action: "accepted",
+        action: 'accepted',
         timestamp: new Date(),
         performedBy: req.user.id,
       });
 
-      // 🔔 NOTIFY REQUESTING STAFF (Alex) that Sam accepted
-      if (notificationService) {
-        await notificationService.sendToUser(request.requestingStaff._id, {
+      // Notify managers that swap is ready for approval
+      if (location && location.managers) {
+        await notificationHelper.sendToUsers(location.managers, {
           sender: req.user.id,
-          type: "swap_accepted",
-          title: "✅ Swap Request Accepted",
-          message: `${req.user.name} accepted your swap request`,
-          relatedTo: { model: "Shift", id: shift._id },
-          data: { swapRequestId: requestId, shiftId: shift._id },
-        });
-      } else if (io) {
-        // Fallback: use io directly
-        io.to(`user:${request.requestingStaff._id}`).emit("notification:new", {
-          sender: req.user.id,
-          type: "swap_accepted",
-          title: "✅ Swap Request Accepted",
-          message: `${req.user.name} accepted your swap request`,
-          relatedTo: { model: "Shift", id: shift._id },
-          data: { swapRequestId: requestId, shiftId: shift._id },
-          createdAt: new Date(),
+          type: 'swap_ready_for_approval',
+          title: '⚡ Swap Ready for Approval',
+          message: `Both staff have agreed to swap. Pending your approval.`,
+          relatedTo: { model: 'Shift', id: shift._id },
+          data: { swapRequestId: requestId, shiftId: shift._id }
         });
       }
-      console.log(`📢 Notified requester that target staff accepted`);
-
-      // 🔔 NOTIFY MANAGERS that swap is ready for final approval
-      if (location && location.managers && location.managers.length > 0) {
-        if (notificationService) {
-          await notificationService.sendToUsers(location.managers, {
-            sender: req.user.id,
-            type: "swap_ready_for_approval",
-            title: "⚡ Swap Ready for Approval",
-            message: `Both staff have agreed to swap. Pending your approval.`,
-            relatedTo: { model: "Shift", id: shift._id },
-            data: { swapRequestId: requestId, shiftId: shift._id },
-          });
-        } else if (io) {
-          location.managers.forEach((managerId) => {
-            io.to(`user:${managerId}`).emit("notification:new", {
-              sender: req.user.id,
-              type: "swap_ready_for_approval",
-              title: "⚡ Swap Ready for Approval",
-              message: `Both staff have agreed to swap. Pending your approval.`,
-              relatedTo: { model: "Shift", id: shift._id },
-              data: { swapRequestId: requestId, shiftId: shift._id },
-              createdAt: new Date(),
-            });
-          });
-        }
-        console.log(`📢 Notified managers that swap is ready for approval`);
-      }
-    }
-
-    // ========== CASE 2: MANAGER APPROVES/REJECTS ==========
+    } 
+    // Manager approves/rejects
     else if (isManager) {
       const oldStatus = request.status;
       request.status = status;
@@ -406,196 +338,82 @@ router.put("/:requestId", protect, async (req, res) => {
       });
 
       // If approved and it's a swap, swap the staff
-      if (status === "approved" && request.type === "swap") {
+      if (status === 'approved' && request.type === 'swap') {
         const requestingStaffIndex = shift.assignedStaff.findIndex(
           (id) => id.toString() === request.requestingStaff._id.toString(),
         );
-
         if (requestingStaffIndex !== -1) {
           shift.assignedStaff[requestingStaffIndex] = request.targetStaff;
         }
-      } // If approved and it's a drop, remove the staff
-      else if (status === "approved" && request.type === "drop") {
-        console.log("🔍 DROP APPROVED - Before update:", {
-          shiftId: shift._id,
-          assignedStaff: shift.assignedStaff,
-          needsCoverage: shift.needsCoverage,
-          availableForPickup: shift.availableForPickup,
+
+        // Notify both staff members
+        await notificationHelper.sendToUser(request.requestingStaff._id, {
+          sender: req.user.id,
+          type: 'swap_approved',
+          title: '✅ Swap Request Approved',
+          message: 'Your swap request has been approved',
+          data: { swapRequestId: requestId, shiftId: shift._id }
         });
 
-        // Remove the staff from assignedStaff
+        if (request.targetStaff) {
+          await notificationHelper.sendToUser(request.targetStaff, {
+            sender: req.user.id,
+            type: 'swap_approved',
+            title: '📅 New Shift Assigned',
+            message: 'You have been assigned to a new shift via swap',
+            data: { swapRequestId: requestId, shiftId: shift._id }
+          });
+        }
+      } 
+      // If approved and it's a drop, remove the staff
+      else if (status === 'approved' && request.type === 'drop') {
         shift.assignedStaff = shift.assignedStaff.filter(
           (id) => id.toString() !== request.requestingStaff._id.toString(),
         );
-
-        // Mark this shift as needing coverage and available for pickup
-        shift.needsCoverage = true;
         shift.availableForPickup = true;
+        shift.needsCoverage = true;
 
-        console.log("🔍 DROP APPROVED - After update:", {
-          shiftId: shift._id,
-          assignedStaff: shift.assignedStaff,
-          needsCoverage: shift.needsCoverage,
-          availableForPickup: shift.availableForPickup,
+        // Notify the staff who dropped
+        await notificationHelper.sendToUser(request.requestingStaff._id, {
+          sender: req.user.id,
+          type: 'drop_approved',
+          title: '✅ Drop Request Approved',
+          message: 'Your drop request has been approved',
+          data: { swapRequestId: requestId, shiftId: shift._id }
         });
       }
 
-      // ===== APPROVAL NOTIFICATIONS =====
-      if (status === "approved") {
-        // Notify requesting staff (Alex)
-        if (notificationService) {
-          await notificationService.sendToUser(request.requestingStaff._id, {
-            sender: req.user.id,
-            type: "swap_approved",
-            title: "✅ Swap Request Approved",
-            message: `Your swap request has been approved`,
-            relatedTo: { model: "Shift", id: shift._id },
-            data: { swapRequestId: requestId, shiftId: shift._id },
-          });
-        } else if (io) {
-          io.to(`user:${request.requestingStaff._id}`).emit(
-            "notification:new",
-            {
-              sender: req.user.id,
-              type: "swap_approved",
-              title: "✅ Swap Request Approved",
-              message: `Your swap request has been approved`,
-              relatedTo: { model: "Shift", id: shift._id },
-              data: { swapRequestId: requestId, shiftId: shift._id },
-              createdAt: new Date(),
-            },
-          );
-        }
-        console.log(`📢 Notified requester that request was approved`);
-
-        // If it's a swap, also notify target staff (Sam)
-        if (request.type === "swap" && request.targetStaff) {
-          if (notificationService) {
-            await notificationService.sendToUser(request.targetStaff, {
-              sender: req.user.id,
-              type: "swap_approved",
-              title: "📅 New Shift Assignment",
-              message: `You have been assigned to a new shift via swap`,
-              relatedTo: { model: "Shift", id: shift._id },
-              data: { swapRequestId: requestId, shiftId: shift._id },
-            });
-          } else if (io) {
-            io.to(`user:${request.targetStaff}`).emit("notification:new", {
-              sender: req.user.id,
-              type: "swap_approved",
-              title: "📅 New Shift Assignment",
-              message: `You have been assigned to a new shift via swap`,
-              relatedTo: { model: "Shift", id: shift._id },
-              data: { swapRequestId: requestId, shiftId: shift._id },
-              createdAt: new Date(),
-            });
-          }
-          console.log(`📢 Notified target staff of new shift assignment`);
-        }
+      // If rejected, notify the requester
+      if (status === 'rejected') {
+        await notificationHelper.sendToUser(request.requestingStaff._id, {
+          sender: req.user.id,
+          type: 'swap_rejected',
+          title: '❌ Swap Request Rejected',
+          message: reason || 'Your swap request has been rejected',
+          data: { swapRequestId: requestId, shiftId: shift._id }
+        });
       }
 
-      // ===== REJECTION NOTIFICATIONS =====
-      if (status === "rejected") {
-        // Notify requesting staff (Alex)
-        if (notificationService) {
-          await notificationService.sendToUser(request.requestingStaff._id, {
-            sender: req.user.id,
-            type: "swap_rejected",
-            title: "❌ Swap Request Rejected",
-            message: `Your swap request has been rejected`,
-            relatedTo: { model: "Shift", id: shift._id },
-            data: { swapRequestId: requestId, shiftId: shift._id },
-          });
-        } else if (io) {
-          io.to(`user:${request.requestingStaff._id}`).emit(
-            "notification:new",
-            {
-              sender: req.user.id,
-              type: "swap_rejected",
-              title: "❌ Swap Request Rejected",
-              message: `Your swap request has been rejected`,
-              relatedTo: { model: "Shift", id: shift._id },
-              data: { swapRequestId: requestId, shiftId: shift._id },
-              createdAt: new Date(),
-            },
-          );
-        }
-        console.log(`📢 Notified requester that request was rejected`);
-
-        // If it's a swap, also notify target staff (Sam)
-        if (request.type === "swap" && request.targetStaff) {
-          if (notificationService) {
-            await notificationService.sendToUser(request.targetStaff, {
-              sender: req.user.id,
-              type: "swap_rejected",
-              title: "❌ Swap Request Rejected",
-              message: `A pending swap request involving you was rejected`,
-              relatedTo: { model: "Shift", id: shift._id },
-              data: { swapRequestId: requestId, shiftId: shift._id },
-            });
-          } else if (io) {
-            io.to(`user:${request.targetStaff}`).emit("notification:new", {
-              sender: req.user.id,
-              type: "swap_rejected",
-              title: "❌ Swap Request Rejected",
-              message: `A pending swap request involving you was rejected`,
-              relatedTo: { model: "Shift", id: shift._id },
-              data: { swapRequestId: requestId, shiftId: shift._id },
-              createdAt: new Date(),
-            });
-          }
-          console.log(`📢 Notified target staff of rejection`);
-        }
-      }
-
-      // Update pending request count if request is resolved
-      if (
-        oldStatus === "pending" &&
-        (status === "approved" || status === "rejected")
-      ) {
+      // Update pending request count
+      if (oldStatus === 'pending' && (status === 'approved' || status === 'rejected')) {
         const requester = await User.findById(request.requestingStaff._id);
         if (requester) {
-          requester.pendingRequests.count = Math.max(
-            0,
-            requester.pendingRequests.count - 1,
+          requester.pendingRequests.count = Math.max(0, requester.pendingRequests.count - 1);
+          requester.pendingRequests.requestIds = requester.pendingRequests.requestIds.filter(
+            (id) => id.toString() !== requestId
           );
-          requester.pendingRequests.requestIds =
-            requester.pendingRequests.requestIds.filter(
-              (id) => id.toString() !== requestId,
-            );
           await requester.save();
         }
       }
     }
 
-    // Update hasPendingSwap flag
-    shift.hasPendingSwap = shift.swapRequests.some(
-      (r) => r.status === "pending",
-    );
+    shift.hasPendingSwap = shift.swapRequests.some(r => r.status === 'pending');
     await shift.save();
 
-    // Add these right before `await shift.save()`
-    console.log(
-      "🔍 Saving shift with availableForPickup =",
-      shift.availableForPickup,
-    );
-    console.log("🔍 Full shift object before save:", {
-      id: shift._id,
-      availableForPickup: shift.availableForPickup,
-      needsCoverage: shift.needsCoverage,
-      assignedStaff: shift.assignedStaff,
-    });
+    res.json({ success: true, data: request });
 
-    await shift.save();
-
-    console.log("🔍 Shift saved successfully");
-
-    res.json({
-      success: true,
-      data: request,
-    });
   } catch (error) {
-    console.error("❌ Error updating swap request:", error);
+    console.error('❌ Error updating swap request:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
