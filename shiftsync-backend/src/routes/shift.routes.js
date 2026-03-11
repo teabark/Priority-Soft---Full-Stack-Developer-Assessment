@@ -273,6 +273,64 @@ router.put(
   }
 );
 
+// @desc    Delete a shift
+// @route   DELETE /api/shifts/:id
+// @access  Private (Manager/Admin)
+router.delete(
+  '/:id',
+  protect,
+  authorize('admin', 'manager'),
+  // checkLocationAccess,
+  async (req, res) => {
+    try {
+      const shift = await Shift.findById(req.params.id);
+      
+      if (!shift) {
+        return res.status(404).json({
+          success: false,
+          message: 'Shift not found'
+        });
+      }
+
+      // Check if shift is published - prevent deletion of published shifts
+      if (shift.status === 'published') {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot delete published shifts. Unpublish the week first.'
+        });
+      }
+
+      // Optional: Check if shift is within 48-hour cutoff
+      const now = new Date();
+      const cutoffDate = new Date(shift.startTime);
+      cutoffDate.setHours(cutoffDate.getHours() - 48);
+      
+      if (now > cutoffDate) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot delete shifts within 48 hours of start time'
+        });
+      }
+
+      await shift.deleteOne();
+
+      // Add to audit log
+      console.log(`🗑️ Shift ${shift._id} deleted by ${req.user.email}`);
+
+      res.json({
+        success: true,
+        message: 'Shift deleted successfully'
+      });
+    } catch (error) {
+      console.error('Error deleting shift:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+);
+
 // Staff assignment
 router.post(
   "/:id/assign",

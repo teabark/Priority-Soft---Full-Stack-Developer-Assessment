@@ -54,23 +54,47 @@ const authorize = (...roles) => {
   };
 };
 
-// Check if user has access to a specific location
-const checkLocationAccess = (req, res, next) => {
-  const locationId = req.params.locationId || req.body.location;
-  
-  if (req.user.role === 'admin') {
-    return next();
+// Check if user has access to the location
+const checkLocationAccess = async (req, res, next) => {
+  try {
+    // For admin, allow all access
+    if (req.user.role === 'admin') {
+      return next();
+    }
+
+    // For manager, check if they have access to the location
+    let locationId = req.params.locationId || req.body.location || req.query.location;
+    
+    // If this is a delete/update request with shift ID, get location from the shift
+    if (!locationId && req.params.id) {
+      const Shift = require('../models/Shift');
+      const shift = await Shift.findById(req.params.id);
+      if (shift) {
+        locationId = shift.location;
+      }
+    }
+
+    if (!locationId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Location ID is required'
+      });
+    }
+
+    // Check if the location is in manager's locations
+    const hasAccess = req.user.locations?.some(id => id.toString() === locationId.toString());
+    
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have access to this location'
+      });
+    }
+
+    next();
+  } catch (error) {
+    next(error);
   }
-  
-  if (req.user.role === 'manager' && 
-      req.user.locations.some(loc => loc.toString() === locationId)) {
-    return next();
-  }
-  
-  return res.status(403).json({
-    success: false,
-    message: 'Not authorized to access this location'
-  });
 };
 
 module.exports = { protect, authorize, checkLocationAccess };
