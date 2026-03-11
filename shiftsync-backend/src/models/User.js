@@ -282,6 +282,8 @@ userSchema.virtual("swapOffers", {
   foreignField: "targetStaff",
 });
 
+
+
 // ENCRYPT PASSWORD BEFORE SAVE - SIMPLE WORKING VERSION
 // userSchema.pre('save', async function(next) {
 //   // Only hash the password if it's modified (or new)
@@ -313,8 +315,15 @@ userSchema.virtual("swapOffers", {
 //   next();
 // });
 
-// Method to compare password
-userSchema.methods.matchPassword = async function (enteredPassword) {
+userSchema.pre('save', async function() {
+  // Only hash the password if it's modified (or new)
+  if (!this.isModified('password')) return;
+  
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+});
+
+userSchema.methods.matchPassword = async function(enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 

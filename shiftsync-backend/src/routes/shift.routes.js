@@ -170,16 +170,16 @@ router.post(
     try {
       console.log("📤 Creating new shift with data:", req.body);
       
-      // // Get location to get its timezone
-      // const Location = mongoose.model('Location');
-      // const location = await Location.findById(req.body.location);
+      // Get the location from database to verify it exists
+      const Location = mongoose.model('Location');
+      const locationDoc = await Location.findById(req.body.location);
       
-      // if (!location) {
-      //   return res.status(400).json({
-      //     success: false,
-      //     message: 'Location not found'
-      //   });
-      // }
+      if (!locationDoc) {
+        return res.status(400).json({
+          success: false,
+          message: 'Location not found'
+        });
+      }
       
       // Calculate editCutoff (48 hours before shift start)
       const startDateTime = new Date(req.body.startTime);
@@ -200,7 +200,6 @@ router.post(
         status: req.body.status || "draft",
         createdBy: req.user.id,
         editCutoff: editCutoffDate,
-        locationTimezone: location.timezone, // Store the timezone
         isPremiumShift: req.body.isPremiumShift || false,
         swapRequests: [],
         complianceWarnings: [],
@@ -208,20 +207,17 @@ router.post(
         assignmentHistory: []
       };
 
-      console.log("📤 Shift data with timezone:", shiftData.locationTimezone);
+      console.log("📤 Final shift data:", shiftData);
 
       const shift = await Shift.create(shiftData);
       console.log("✅ Shift created:", shift._id);
       
-      // If staff were assigned during creation, notify them
+      // Send notifications if staff assigned
       if (shift.assignedStaff && shift.assignedStaff.length > 0) {
         const notificationHelper = req.app.get('notificationHelper');
-        console.log(`📢 Sending assignment notifications to ${shift.assignedStaff.length} staff`);
-        
         for (const staffId of shift.assignedStaff) {
           try {
             await notificationHelper.notifyShiftAssigned(shift, staffId, req.user.id);
-            console.log(`✅ Notification sent to staff ${staffId}`);
           } catch (notifError) {
             console.error(`❌ Failed to notify staff ${staffId}:`, notifError);
           }
