@@ -194,6 +194,10 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.get("/hello", (res, req) => {
+  res.send('Hello World');
+})
+
 // TEMPORARY - Simple shifts endpoint for managers
 app.get('/api/manager-shifts', async (req,res) => {
   try {
