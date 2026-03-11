@@ -27,7 +27,7 @@ const {
   validatePublish,
   validateDateRange,
   handleValidationErrors,
-} = require("../validations/scheduleValidation");
+} = require("../validations/ScheduleValidation");
 
 // All routes require authentication
 router.use(protect);
