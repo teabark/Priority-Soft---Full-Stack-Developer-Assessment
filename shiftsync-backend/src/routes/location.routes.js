@@ -5,6 +5,7 @@ const {
   getLocations,
   getLocation,
   updateLocation,
+  deleteLocation,
   assignStaff,
   removeStaff,
   getOnDutyStaff,
@@ -55,7 +56,14 @@ router.put(
   updateLocation
 );
 
+
 // DELETE routes
+router.delete(
+  '/:id',
+  authorize('admin'),
+  deleteLocation // Use the controller function
+);
+
 router.delete(
   '/:id/staff/:staffId',
   authorize('admin', 'manager'),

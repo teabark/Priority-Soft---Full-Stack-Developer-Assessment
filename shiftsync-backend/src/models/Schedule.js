@@ -213,16 +213,16 @@ scheduleSchema.index({ status: 1, weekStartDate: -1 });
 scheduleSchema.index({ 'stats.compliance.hasIssues': 1 });
 scheduleSchema.index({ publishedAt: -1 });
 
-// Calculate week end date before save
-scheduleSchema.pre('save', function(next) {
-  if (this.weekStartDate && !this.weekEndDate) {
+// Calculate week end date before save - OPTIMIZED
+scheduleSchema.pre('save', async function() {
+  // Only recalculate if weekStartDate was modified and weekEndDate isn't set
+  if (this.isModified('weekStartDate') && !this.weekEndDate) {
     this.weekEndDate = new Date(this.weekStartDate);
     this.weekEndDate.setDate(this.weekEndDate.getDate() + 6);
     this.weekEndDate.setHours(23, 59, 59, 999);
   }
   
-  this.updatedAt = Date.now();
-  next();
+  // No need to set updatedAt - timestamps: true handles it
 });
 
 // Virtual for week number

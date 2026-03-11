@@ -246,6 +246,57 @@ const getOnDutyStaff = async (req, res) => {
   }
 };
 
+// @desc    Delete location
+// @route   DELETE /api/locations/:id
+// @access  Private/Admin
+const deleteLocation = async (req, res) => {
+  try {
+    const Location = require('../models/Location');
+    const User = require('../models/User');
+    const Shift = require('../models/Shift');
+    
+    const location = await Location.findById(req.params.id);
+    
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: 'Location not found'
+      });
+    }
+
+    // Check if location has any shifts
+    const shiftsCount = await Shift.countDocuments({ location: location._id });
+    
+    if (shiftsCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete location with existing shifts. Archive it instead.'
+      });
+    }
+
+    // Remove location from all managers
+    if (location.managers && location.managers.length > 0) {
+      await User.updateMany(
+        { _id: { $in: location.managers } },
+        { $pull: { locations: location._id } }
+      );
+    }
+
+    await location.deleteOne();
+
+    res.json({
+      success: true,
+      message: 'Location deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting location:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 // @desc    Validate location's operating hours
 // @route   GET /api/locations/:id/validate-hours
 // @access  Private/Admin
@@ -281,6 +332,7 @@ module.exports = {
   getLocation,
   updateLocation,
   assignStaff,
+  deleteLocation,
   removeStaff,
   getOnDutyStaff,
   validateOperatingHours
