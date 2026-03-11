@@ -75,6 +75,17 @@ router.post("/request", protect, async (req, res) => {
       shift.editCutoff = cutoffDate;
     }
 
+    // Ensure locationTimezone exists
+    if (!shift.locationTimezone) {
+      const Location = mongoose.model("Location");
+      const location = await Location.findById(shift.location);
+      if (location && location.timezone) {
+        shift.locationTimezone = location.timezone;
+      } else {
+        return res.status(400).json({ success: false, message: "Location timezone not found for shift." });
+      }
+    }
+
     await shift.save();
 
     // Increment user's pending requests
@@ -153,6 +164,84 @@ router.get("/available", protect, async (req, res) => {
   } catch (error) {
     console.error("❌ Error fetching available shifts:", error);
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// @desc    Cancel a swap request (by requester)
+// @route   DELETE /api/swaps/:requestId
+// @access  Private
+router.delete('/:requestId', protect, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    console.log('🗑️ DELETE request received for:', requestId);
+    console.log('👤 Current user ID:', req.user.id);
+    console.log('👤 Current user role:', req.user.role);
+
+    // Find shift containing this request
+    const shift = await Shift.findOne({
+      'swapRequests._id': requestId
+    });
+
+    if (!shift) {
+      console.log('❌ No shift found with this request ID');
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Request not found' 
+      });
+    }
+
+    console.log('✅ Found shift:', shift._id);
+
+    // Find the specific request
+    const request = shift.swapRequests.id(requestId);
+    if (!request) {
+      console.log('❌ Request not found in shift');
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Request not found' 
+      });
+    }
+
+    console.log('📋 Request details:', {
+      requestingStaff: request.requestingStaff,
+      type: request.type,
+      status: request.status
+    });
+
+    // Only the requester can cancel
+    if (request.requestingStaff.toString() !== req.user.id) {
+      console.log('❌ Authorization failed:', {
+        requestOwner: request.requestingStaff.toString(),
+        currentUser: req.user.id
+      });
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Not authorized' 
+      });
+    }
+
+    console.log('✅ Authorization successful, removing request...');
+
+    // Remove the request
+    shift.swapRequests = shift.swapRequests.filter(
+      r => r._id.toString() !== requestId
+    );
+
+    shift.hasPendingSwap = shift.swapRequests.some(r => r.status === 'pending');
+    await shift.save();
+    console.log('✅ Request removed from shift');
+
+    res.json({
+      success: true,
+      message: 'Request cancelled successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Error cancelling request:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 });
 
@@ -272,213 +361,6 @@ router.get("/pending-approvals", protect, async (req, res) => {
   }
 });
 
-// @desc    Approve or reject a swap request
-// @route   PUT /api/swaps/:requestId
-// @access  Private (Manager/Admin or Target Staff for swaps)
-router.put("/:requestId", protect, async (req, res) => {
-  try {
-    const { status, reason } = req.body;
-    const { requestId } = req.params;
 
-    const shift = await Shift.findOne({
-      'swapRequests._id': requestId
-    }).populate('swapRequests.requestingStaff', 'name email');
-
-    if (!shift) {
-      return res.status(404).json({ success: false, message: 'Request not found' });
-    }
-
-    const request = shift.swapRequests.id(requestId);
-    if (!request) {
-      return res.status(404).json({ success: false, message: 'Request not found' });
-    }
-
-    const isManager = req.user.role === 'admin' || req.user.role === 'manager';
-    const isTargetStaff = request.targetStaff?.toString() === req.user.id;
-
-    if (!isManager && !isTargetStaff) {
-      return res.status(403).json({ success: false, message: 'Not authorized' });
-    }
-
-    const notificationHelper = req.app.get('notificationHelper');
-    const Location = mongoose.model('Location');
-    const location = await Location.findById(shift.location);
-
-    // Target staff accepts the swap
-    if (request.type === 'swap' && isTargetStaff && status === 'accepted') {
-      request.status = 'pending_approval';
-      request.history.push({
-        action: 'accepted',
-        timestamp: new Date(),
-        performedBy: req.user.id,
-      });
-
-      // Notify managers that swap is ready for approval
-      if (location && location.managers) {
-        await notificationHelper.sendToUsers(location.managers, {
-          sender: req.user.id,
-          type: 'swap_ready_for_approval',
-          title: '⚡ Swap Ready for Approval',
-          message: `Both staff have agreed to swap. Pending your approval.`,
-          relatedTo: { model: 'Shift', id: shift._id },
-          data: { swapRequestId: requestId, shiftId: shift._id }
-        });
-      }
-    } 
-    // Manager approves/rejects
-    else if (isManager) {
-      const oldStatus = request.status;
-      request.status = status;
-      request.respondedAt = new Date();
-      request.history.push({
-        action: status,
-        timestamp: new Date(),
-        performedBy: req.user.id,
-        reason,
-      });
-
-      // If approved and it's a swap, swap the staff
-      if (status === 'approved' && request.type === 'swap') {
-        const requestingStaffIndex = shift.assignedStaff.findIndex(
-          (id) => id.toString() === request.requestingStaff._id.toString(),
-        );
-        if (requestingStaffIndex !== -1) {
-          shift.assignedStaff[requestingStaffIndex] = request.targetStaff;
-        }
-
-        // Notify both staff members
-        await notificationHelper.sendToUser(request.requestingStaff._id, {
-          sender: req.user.id,
-          type: 'swap_approved',
-          title: '✅ Swap Request Approved',
-          message: 'Your swap request has been approved',
-          data: { swapRequestId: requestId, shiftId: shift._id }
-        });
-
-        if (request.targetStaff) {
-          await notificationHelper.sendToUser(request.targetStaff, {
-            sender: req.user.id,
-            type: 'swap_approved',
-            title: '📅 New Shift Assigned',
-            message: 'You have been assigned to a new shift via swap',
-            data: { swapRequestId: requestId, shiftId: shift._id }
-          });
-        }
-      } 
-      // If approved and it's a drop, remove the staff
-      else if (status === 'approved' && request.type === 'drop') {
-        shift.assignedStaff = shift.assignedStaff.filter(
-          (id) => id.toString() !== request.requestingStaff._id.toString(),
-        );
-        shift.availableForPickup = true;
-        shift.needsCoverage = true;
-
-        // Notify the staff who dropped
-        await notificationHelper.sendToUser(request.requestingStaff._id, {
-          sender: req.user.id,
-          type: 'drop_approved',
-          title: '✅ Drop Request Approved',
-          message: 'Your drop request has been approved',
-          data: { swapRequestId: requestId, shiftId: shift._id }
-        });
-      }
-
-      // If rejected, notify the requester
-      if (status === 'rejected') {
-        await notificationHelper.sendToUser(request.requestingStaff._id, {
-          sender: req.user.id,
-          type: 'swap_rejected',
-          title: '❌ Swap Request Rejected',
-          message: reason || 'Your swap request has been rejected',
-          data: { swapRequestId: requestId, shiftId: shift._id }
-        });
-      }
-
-      // Update pending request count
-      if (oldStatus === 'pending' && (status === 'approved' || status === 'rejected')) {
-        const requester = await User.findById(request.requestingStaff._id);
-        if (requester) {
-          requester.pendingRequests.count = Math.max(0, requester.pendingRequests.count - 1);
-          requester.pendingRequests.requestIds = requester.pendingRequests.requestIds.filter(
-            (id) => id.toString() !== requestId
-          );
-          await requester.save();
-        }
-      }
-    }
-
-    shift.hasPendingSwap = shift.swapRequests.some(r => r.status === 'pending');
-    await shift.save();
-
-    res.json({ success: true, data: request });
-
-  } catch (error) {
-    console.error('❌ Error updating swap request:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// @desc    Cancel a swap request (by requester)
-// @route   DELETE /api/swaps/:requestId
-// @access  Private
-router.delete("/:requestId", protect, async (req, res) => {
-  try {
-    const { requestId } = req.params;
-
-    const shift = await Shift.findOne({
-      "swapRequests._id": requestId,
-    });
-
-    if (!shift) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Request not found" });
-    }
-
-    const request = shift.swapRequests.id(requestId);
-    if (!request) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Request not found" });
-    }
-
-    // Only the requester can cancel
-    if (request.requestingStaff.toString() !== req.user.id) {
-      return res
-        .status(403)
-        .json({ success: false, message: "Not authorized" });
-    }
-
-    // Remove the request
-    request.remove();
-
-    // Update pending request count
-    const requester = await User.findById(req.user.id);
-    if (requester) {
-      requester.pendingRequests.count = Math.max(
-        0,
-        requester.pendingRequests.count - 1,
-      );
-      requester.pendingRequests.requestIds =
-        requester.pendingRequests.requestIds.filter(
-          (id) => id.toString() !== requestId,
-        );
-      await requester.save();
-    }
-
-    shift.hasPendingSwap = shift.swapRequests.some(
-      (r) => r.status === "pending",
-    );
-    await shift.save();
-
-    res.json({
-      success: true,
-      message: "Request cancelled",
-    });
-  } catch (error) {
-    console.error("❌ Error cancelling request:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
 
 module.exports = router;

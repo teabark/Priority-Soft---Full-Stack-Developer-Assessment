@@ -19,7 +19,10 @@ const createShift = async (req, res) => {
         message: 'Location not found'
       });
     }
-    
+
+    // Set locationTimezone from location	required for Shift model
+    req.body.locationTimezone = location.timezone;
+
     // Check if it's a premium shift
     req.body.isPremiumShift = location.isPremiumShift(req.body.startTime, req.body.endTime);
     

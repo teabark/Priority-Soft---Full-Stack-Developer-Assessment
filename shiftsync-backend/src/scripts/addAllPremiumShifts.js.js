@@ -176,7 +176,8 @@ const addAllPremiumShifts = async () => {
           staff: s.staff._id,
           assignedAt: new Date(),
           assignedBy: admin?._id || s.staff._id
-        }]
+        }],
+        locationTimezone: s.location.timezone // <-- Add this line
       });
 
       await shift.save();

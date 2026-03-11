@@ -160,66 +160,61 @@ router.post(
 // @desc    Unpublish a week's schedule
 // @route   POST /api/schedules/unpublish-week
 // @access  Private (Manager/Admin)
-router.post(
-  "/unpublish-week",
-  protect,
-  authorize("admin", "manager"),
-  async (req, res) => {
-    try {
-      const { weekStartDate, locationIds } = req.body;
-
-      const weekStart = new Date(weekStartDate);
-      weekStart.setHours(0, 0, 0, 0);
-
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 7);
-      weekEnd.setHours(23, 59, 59, 999);
-
-      // Find all published shifts in this week
-      const Shift = require("../models/Shift");
-      const shifts = await Shift.find({
-        location: { $in: locationIds },
-        startTime: { $gte: weekStart, $lte: weekEnd },
-        status: "published",
-      });
-
-      console.log(`📅 Found ${shifts.length} shifts to unpublish`);
-
-      // Update all shifts back to draft (keep editCutoff for reference)
-      for (const shift of shifts) {
-        shift.status = "draft";
-        shift.publishedAt = null;
-        shift.publishedBy = null;
-        // Keep editCutoff as is - it's still valid for future reference
-        await shift.save();
-      }
-
-      // Update schedule record
-      const Schedule = require("../models/Schedule");
-      const schedule = await Schedule.findOne({ weekStartDate: weekStart });
-      if (schedule) {
-        schedule.status = "draft";
-        schedule.publishedAt = null;
-        schedule.publishedBy = null;
-        await schedule.save();
-      }
-
-      res.json({
-        success: true,
-        data: {
-          unpublishedCount: shifts.length,
-        },
-        message: `Unpublished ${shifts.length} shifts`,
-      });
-    } catch (error) {
-      console.error("❌ Error unpublishing week:", error);
-      res.status(500).json({
-        success: false,
-        message: error.message,
-      });
+router.post('/unpublish-week', protect, authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const { weekStartDate, locationIds } = req.body;
+    
+    const weekStart = new Date(weekStartDate);
+    weekStart.setHours(0, 0, 0, 0);
+    
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    weekEnd.setHours(23, 59, 59, 999);
+    
+    // Find all published shifts in this week
+    const Shift = require('../models/Shift');
+    const shifts = await Shift.find({
+      location: { $in: locationIds },
+      startTime: { $gte: weekStart, $lte: weekEnd },
+      status: 'published'
+    });
+    
+    console.log(`📅 Found ${shifts.length} shifts to unpublish`);
+    
+    // Update all shifts back to draft (PRESERVE all fields)
+    for (const shift of shifts) {
+      shift.status = 'draft';
+      shift.publishedAt = null;
+      shift.publishedBy = null;
+      // Don't change locationTimezone - it stays the same
+      await shift.save();
     }
-  },
-);
+    
+    // Update schedule record
+    const Schedule = require('../models/Schedule');
+    const schedule = await Schedule.findOne({ weekStartDate: weekStart });
+    if (schedule) {
+      schedule.status = 'draft';
+      schedule.publishedAt = null;
+      schedule.publishedBy = null;
+      await schedule.save();
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        unpublishedCount: shifts.length
+      },
+      message: `Unpublished ${shifts.length} shifts`
+    });
+  } catch (error) {
+    console.error('❌ Error unpublishing week:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
 
 // Publishing
 router.post(

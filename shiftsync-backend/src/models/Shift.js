@@ -208,10 +208,10 @@ const shiftSchema = new mongoose.Schema(
     },
 
     // Add to shiftSchema
-    locationTimezone: {
-      type: String,
-      required: true,
-    },
+    // locationTimezone: {
+    //   type: String,
+    //   required: true,
+    // },
     // Swap/Drop Management
     swapRequests: [swapRequestSchema],
 

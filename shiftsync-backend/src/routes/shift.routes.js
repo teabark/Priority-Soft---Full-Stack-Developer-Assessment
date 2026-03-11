@@ -170,16 +170,16 @@ router.post(
     try {
       console.log("📤 Creating new shift with data:", req.body);
       
-      // Get location to get its timezone
-      const Location = mongoose.model('Location');
-      const location = await Location.findById(req.body.location);
+      // // Get location to get its timezone
+      // const Location = mongoose.model('Location');
+      // const location = await Location.findById(req.body.location);
       
-      if (!location) {
-        return res.status(400).json({
-          success: false,
-          message: 'Location not found'
-        });
-      }
+      // if (!location) {
+      //   return res.status(400).json({
+      //     success: false,
+      //     message: 'Location not found'
+      //   });
+      // }
       
       // Calculate editCutoff (48 hours before shift start)
       const startDateTime = new Date(req.body.startTime);

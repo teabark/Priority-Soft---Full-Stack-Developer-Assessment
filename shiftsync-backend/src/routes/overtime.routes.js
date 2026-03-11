@@ -20,8 +20,8 @@ router.use((req, res, next) => {
 
 // @desc    Check overtime impact for a potential shift assignment
 // @route   POST /api/overtime/check-assignment
-// @access  Private (Managers, Admins)
-router.post('/check-assignment', protect, authorize('admin', 'manager'), async (req, res) => {
+// @access  Private (ALL authenticated users - including staff for pickups)
+router.post('/check-assignment', protect, async (req, res) => {
   try {
     const { shiftId, staffId } = req.body;
     
@@ -37,7 +37,7 @@ router.post('/check-assignment', protect, authorize('admin', 'manager'), async (
     }
 
     // Get overtime service
-    const service = req.app.get('overtimeService') || overtimeService;
+    const service = req.app.get('overtimeService');
     if (!service) {
       return res.status(500).json({ 
         success: false, 
