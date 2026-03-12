@@ -74,9 +74,37 @@ It solves:
 
 ---
 
+## 💻 LOCAL SETUP / CLONE
+
+If you want to run it locally:
+### 1. Clone the repositories:
+
+- ```bash
+- git clone <frontend-repo-url> shiftsync-frontend
+- git clone <backend-repo-url> shiftsync-backend
+
+### 2. Install dependencies:
+
+- cd shiftsync-frontend
+- npm install
+
+- cd ../shiftsync-backend
+- npm install
+
+### 3. Start the servers:
+
+#### Frontend:
+- cd shiftsync-frontend
+- npm start
+
+#### Backend:
+- cd shiftsync-backend
+- npm run dev
+
+---
 ## ⚠️ NOTES
+--
+- Overtime warnings are informational only
+- Multi-timezone shifts displayed in location local time 🌙
 
-- Overtime warnings are informational only  
-- Multi-timezone shifts displayed in location local time 🌙  
-
-✅ Backend and frontend are deployed separately, ready-to-use on Render with demo accounts and notifications preloaded.
+- ✅ Backend and frontend are deployed separately ready-to-use on Render with demo accounts and notifications preloaded.
