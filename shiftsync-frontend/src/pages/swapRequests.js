@@ -54,6 +54,7 @@ const SwapRequests = () => {
   const [myRequests, setMyRequests] = useState([]);
   const [availableShifts, setAvailableShifts] = useState([]);
   const [tabValue, setTabValue] = useState(0);
+  const [checkingPickupOvertime, setCheckingPickupOvertime] = useState(false);
   const [openSwapDialog, setOpenSwapDialog] = useState(false);
   const [openDropDialog, setOpenDropDialog] = useState(false);
   const [selectedShift, setSelectedShift] = useState(null);
