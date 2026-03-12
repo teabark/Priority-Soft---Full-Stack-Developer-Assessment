@@ -198,10 +198,11 @@ app.get("/hello", (res, req) => {
   res.send('Hello World');
 })
 
-app.get("/", (req, res) => {
-  res.json({
-    message: "ShiftSync API is running",
-    health: "/health"
+app.get('/', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
   });
 });
 
