@@ -20,7 +20,6 @@ import {
   IconButton,
 } from '@mui/material';
 import {
-  Warning as WarningIcon,
   Error as ErrorIcon,
   Info as InfoIcon,
   TrendingUp as TrendingUpIcon,
@@ -34,7 +33,7 @@ import { useOvertime } from '../../context/OvertimeContext';
 import axios from 'axios';
 
 const OvertimeDashboard = () => {
-  const { dashboardData, loading, loadDashboard } = useOvertime();
+  const { loading } = useOvertime();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weeklyStaffHours, setWeeklyStaffHours] = useState([]);
   const [loadingWeek, setLoadingWeek] = useState(false);

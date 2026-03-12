@@ -20,7 +20,6 @@ import {
 } from "@mui/material";
 import axios from "axios";
 import { useOvertime } from "../../context/OvertimeContext";
-import OvertimeWarning from "../overtime/OvertimeWarning";
 
 const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
   const [locations, setLocations] = useState([]);
@@ -28,9 +27,7 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [fetchError, setFetchError] = useState("");
-  const { checkAssignment, overrideConsecutiveDays } = useOvertime();
-  const [overtimeCheck, setOvertimeCheck] = useState(null);
-  const [checkingOvertime, setCheckingOvertime] = useState(false);
+  const {  } = useOvertime();
   const [selectedStaffForCheck, setSelectedStaffForCheck] = useState(null);
 
   // Simple date inputs
@@ -157,40 +154,6 @@ const handleStaffSelect = async (staffId) => {
   // Toggle staff selection
   handleStaffToggle(staffId);
   
-  // If selecting and we have a shift, check overtime
-  if (!formData.assignedStaff.includes(staffId) && formData.location) {
-    setSelectedStaffForCheck(staffId);
-    setCheckingOvertime(true);
-    
-    const tempShift = {
-      _id: editShift?._id || 'temp',
-      startTime: new Date(`${formData.date}T${formData.startHour}:${formData.startMinute}:00`),
-      endTime: new Date(`${formData.date}T${formData.endHour}:${formData.endMinute}:00`),
-      duration: calculateDuration(formData),
-      location: formData.location,
-      requiredSkill: formData.requiredSkill
-    };
-    
-    // const result = await checkAssignment(tempShift, staffId);
-    // setOvertimeCheck(result);
-    // setCheckingOvertime(false);
-  }
-};
-
-// Helper to calculate duration
-const calculateDuration = (data) => {
-  const start = new Date(`${data.date}T${data.startHour}:${data.startMinute}:00`);
-  const end = new Date(`${data.date}T${data.endHour}:${data.endMinute}:00`);
-  return Math.round((end - start) / (1000 * 60));
-};
-
-// Handle override
-const handleOverride = async (reason) => {
-  if (editShift?._id && selectedStaffForCheck) {
-    await overrideConsecutiveDays(selectedStaffForCheck, editShift._id, reason);
-    // Recheck after override
-    handleStaffSelect(selectedStaffForCheck);
-  }
 };
 
   const handleStaffToggle = (staffId) => {

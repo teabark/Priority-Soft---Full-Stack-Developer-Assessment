@@ -1,8 +1,8 @@
 require('dotenv').config();
 const http = require('http');
 const mongoose = require('mongoose');
-
 const app = require('./config/app');
+const cors = require('cors');
 const NotificationHelper = require('./services/notification.helper');
 const connectDB = require('./config/database');
 const setupSocket = require('./socket');
@@ -10,6 +10,12 @@ const { errorHandler } = require('./middleware/errorHandler');
 
 // Connect to database
 connectDB();
+
+import cors from "cors";
+app.use(cors({
+  origin: "*", // or specify your frontend URL
+  credentials: true
+}));
 
 // Create HTTP server
 const server = http.createServer(app);
