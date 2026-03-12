@@ -19,6 +19,8 @@ import {
   CircularProgress,
 } from "@mui/material";
 import axios from "axios";
+import { useOvertime } from "../../context/OvertimeContext";
+import OvertimeWarning from "../overtime/OvertimeWarning";
 
 const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
   const [locations, setLocations] = useState([]);
@@ -26,6 +28,10 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [fetchError, setFetchError] = useState("");
+  const { checkAssignment, overrideConsecutiveDays } = useOvertime();
+  const [overtimeCheck, setOvertimeCheck] = useState(null);
+  const [checkingOvertime, setCheckingOvertime] = useState(false);
+  const [selectedStaffForCheck, setSelectedStaffForCheck] = useState(null);
 
   // Simple date inputs
   const today = new Date().toISOString().split("T")[0];
@@ -70,29 +76,29 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
     }
   }, [open]);
 
-  // Load edit shift data if editing
-  useEffect(() => {
-    if (editShift && open) {
-      console.log("📝 Editing shift:", editShift);
+// In CreateShiftForm.js, check that the useEffect for editing is working:
+useEffect(() => {
+  if (editShift && open) {
+    console.log("📝 Editing shift:", editShift);
+    
+    // Parse the existing shift times
+    const startDate = new Date(editShift.startTime);
+    const endDate = new Date(editShift.endTime);
 
-      // Parse the existing shift times
-      const startDate = new Date(editShift.startTime);
-      const endDate = new Date(editShift.endTime);
-
-      setFormData({
-        location: editShift.location?._id || editShift.location || "",
-        date: startDate.toISOString().split("T")[0],
-        startHour: String(startDate.getHours()).padStart(2, "0"),
-        startMinute: String(startDate.getMinutes()).padStart(2, "0"),
-        endHour: String(endDate.getHours()).padStart(2, "0"),
-        endMinute: String(endDate.getMinutes()).padStart(2, "0"),
-        requiredSkill: editShift.requiredSkill || "",
-        requiredCount: editShift.requiredCount || 1,
-        assignedStaff: editShift.assignedStaff?.map((s) => s._id || s) || [],
-        managerNotes: editShift.managerNotes || "",
-      });
-    }
-  }, [editShift, open]);
+    setFormData({
+      location: editShift.location?._id || editShift.location || "",
+      date: startDate.toISOString().split("T")[0],
+      startHour: String(startDate.getHours()).padStart(2, "0"),
+      startMinute: String(startDate.getMinutes()).padStart(2, "0"),
+      endHour: String(endDate.getHours()).padStart(2, "0"),
+      endMinute: String(endDate.getMinutes()).padStart(2, "0"),
+      requiredSkill: editShift.requiredSkill || "",
+      requiredCount: editShift.requiredCount || 1,
+      assignedStaff: editShift.assignedStaff?.map((s) => s._id || s) || [],
+      managerNotes: editShift.managerNotes || "",
+    });
+  }
+}, [editShift, open]);
 
   const fetchLocations = async () => {
     setLoadingLocations(true);
@@ -147,6 +153,46 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
     }
   };
 
+const handleStaffSelect = async (staffId) => {
+  // Toggle staff selection
+  handleStaffToggle(staffId);
+  
+  // If selecting and we have a shift, check overtime
+  if (!formData.assignedStaff.includes(staffId) && formData.location) {
+    setSelectedStaffForCheck(staffId);
+    setCheckingOvertime(true);
+    
+    const tempShift = {
+      _id: editShift?._id || 'temp',
+      startTime: new Date(`${formData.date}T${formData.startHour}:${formData.startMinute}:00`),
+      endTime: new Date(`${formData.date}T${formData.endHour}:${formData.endMinute}:00`),
+      duration: calculateDuration(formData),
+      location: formData.location,
+      requiredSkill: formData.requiredSkill
+    };
+    
+    // const result = await checkAssignment(tempShift, staffId);
+    // setOvertimeCheck(result);
+    // setCheckingOvertime(false);
+  }
+};
+
+// Helper to calculate duration
+const calculateDuration = (data) => {
+  const start = new Date(`${data.date}T${data.startHour}:${data.startMinute}:00`);
+  const end = new Date(`${data.date}T${data.endHour}:${data.endMinute}:00`);
+  return Math.round((end - start) / (1000 * 60));
+};
+
+// Handle override
+const handleOverride = async (reason) => {
+  if (editShift?._id && selectedStaffForCheck) {
+    await overrideConsecutiveDays(selectedStaffForCheck, editShift._id, reason);
+    // Recheck after override
+    handleStaffSelect(selectedStaffForCheck);
+  }
+};
+
   const handleStaffToggle = (staffId) => {
     setFormData((prev) => {
       const current = prev.assignedStaff || [];
@@ -171,88 +217,96 @@ const CreateShiftForm = ({ open, onClose, onShiftCreated, editShift }) => {
     return newErrors;
   };
 
-const handleSubmit = async () => {
-  const newErrors = validateForm();
-  if (Object.keys(newErrors).length > 0) {
-    setErrors(newErrors);
-    return;
-  }
-
-  setLoading(true);
-  try {
-    // Get user ID from token
-    let userId = null;
-    const token = localStorage.getItem("token");
-    if (token) {
-      const base64Url = token.split(".")[1];
-      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-      const payload = JSON.parse(window.atob(base64));
-      userId = payload.id;
-    }
-
-    if (!userId) {
-      setErrors({ submit: "User not authenticated. Please log in again." });
-      setLoading(false);
+  const handleSubmit = async () => {
+    const newErrors = validateForm();
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
 
-    // Create date objects from the simplified form fields
-    const startDateTime = new Date(
-      `${formData.date}T${formData.startHour}:${formData.startMinute}:00`,
-    );
-    const endDateTime = new Date(
-      `${formData.date}T${formData.endHour}:${formData.endMinute}:00`,
-    );
+  //     // Check if there are overtime errors (hard blocks)
+  // if (overtimeCheck && overtimeCheck.errors.length > 0) {
+  //   setErrors({ 
+  //     submit: 'Cannot assign due to overtime violations. Please review warnings.' 
+  //   });
+  //   return;
+  // }
 
-    // Format the date as YYYY-MM-DD for the database
-    const dateStr = formData.date; // This is already in YYYY-MM-DD format
+    setLoading(true);
+    try {
+      // Get user ID from token
+      let userId = null;
+      const token = localStorage.getItem("token");
+      if (token) {
+        const base64Url = token.split(".")[1];
+        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+        const payload = JSON.parse(window.atob(base64));
+        userId = payload.id;
+      }
 
-    // Calculate editCutoff (48 hours before shift start)
-    const editCutoffDate = new Date(startDateTime);
-    editCutoffDate.setHours(editCutoffDate.getHours() - 48);
+      if (!userId) {
+        setErrors({ submit: "User not authenticated. Please log in again." });
+        setLoading(false);
+        return;
+      }
 
-    const submitData = {
-      location: formData.location,
-      date: dateStr,  // Use the date string from form
-      startTime: startDateTime.toISOString(),  // Use the constructed date
-      endTime: endDateTime.toISOString(),      // Use the constructed date
-      requiredSkill: formData.requiredSkill,
-      requiredCount: parseInt(formData.requiredCount),
-      assignedStaff: formData.assignedStaff || [],
-      managerNotes: formData.managerNotes || "",
-      status: "draft",
-      createdBy: userId,
-      editCutoff: editCutoffDate.toISOString(),
-    };
+      // Create date objects from the simplified form fields
+      const startDateTime = new Date(
+        `${formData.date}T${formData.startHour}:${formData.startMinute}:00`,
+      );
+      const endDateTime = new Date(
+        `${formData.date}T${formData.endHour}:${formData.endMinute}:00`,
+      );
 
-    console.log("📤 Submitting shift data:", submitData);
-    console.log("📤 Assigned staff IDs:", formData.assignedStaff);
+      // Format the date as YYYY-MM-DD for the database
+      const dateStr = formData.date; // This is already in YYYY-MM-DD format
 
-    const url = editShift
-      ? `${process.env.REACT_APP_API_URL}/shifts/${editShift._id}`
-      : `${process.env.REACT_APP_API_URL}/shifts`;
+      // Calculate editCutoff (48 hours before shift start)
+      const editCutoffDate = new Date(startDateTime);
+      editCutoffDate.setHours(editCutoffDate.getHours() - 48);
 
-    const method = editShift ? "put" : "post";
+      const submitData = {
+        location: formData.location,
+        date: dateStr, // Use the date string from form
+        startTime: startDateTime.toISOString(), // Use the constructed date
+        endTime: endDateTime.toISOString(), // Use the constructed date
+        requiredSkill: formData.requiredSkill,
+        requiredCount: parseInt(formData.requiredCount),
+        assignedStaff: formData.assignedStaff || [],
+        managerNotes: formData.managerNotes || "",
+        status: "draft",
+        createdBy: userId,
+        editCutoff: editCutoffDate.toISOString(),
+      };
 
-    const res = await axios[method](url, submitData, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
+      console.log("📤 Submitting shift data:", submitData);
+      console.log("📤 Assigned staff IDs:", formData.assignedStaff);
 
-    console.log("✅ Shift saved successfully:", res.data);
-    onShiftCreated(res.data.data);
-    onClose();
-  } catch (error) {
-    console.error("❌ Error saving shift:", error);
-    setErrors({
-      submit: error.response?.data?.message || "Error saving shift",
-    });
-  } finally {
-    setLoading(false);
-  }
-};
+      const url = editShift
+        ? `${process.env.REACT_APP_API_URL}/shifts/${editShift._id}`
+        : `${process.env.REACT_APP_API_URL}/shifts`;
+
+      const method = editShift ? "put" : "post";
+
+      const res = await axios[method](url, submitData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      console.log("✅ Shift saved successfully:", res.data);
+      onShiftCreated(res.data.data);
+      onClose();
+    } catch (error) {
+      console.error("❌ Error saving shift:", error);
+      setErrors({
+        submit: error.response?.data?.message || "Error saving shift",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -425,7 +479,7 @@ const handleSubmit = async () => {
                   <Chip
                     key={staffMember._id}
                     label={staffMember.name}
-                    onClick={() => handleStaffToggle(staffMember._id)}
+                    onClick={() => handleStaffSelect(staffMember._id)} 
                     color={
                       formData.assignedStaff?.includes(staffMember._id)
                         ? "primary"
@@ -474,6 +528,7 @@ const handleSubmit = async () => {
         </Button>
       </DialogActions>
     </Dialog>
+    
   );
 };
 

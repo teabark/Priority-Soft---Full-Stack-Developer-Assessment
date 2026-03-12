@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   AppBar,
   Box,
@@ -20,8 +20,11 @@ import {
   List as NotificationList,
   ListItem as NotificationListItem,
   ListItemText as NotificationListItemText,
-  Button
-} from '@mui/material';
+  Button,
+  Chip,
+} from "@mui/material";
+import axios from "axios";
+import { useEffect } from "react";
 import {
   Menu as MenuIcon,
   Dashboard as DashboardIcon,
@@ -30,23 +33,49 @@ import {
   LocationOn as LocationIcon,
   People as PeopleIcon,
   Notifications as NotificationsIcon,
+  Timeline as TimelineIcon,
   ExitToApp as LogoutIcon,
   SwapHoriz as SwapHorizIcon,
-} from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import { useNotifications } from '../../context/NotificationContext';
-import { formatDistanceToNow } from 'date-fns';
+  Assessment as AssessmentIcon,
+} from "@mui/icons-material";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import { useNotifications } from "../../context/NotificationContext";
+import { formatDistanceToNow } from "date-fns";
 
 const drawerWidth = 240;
 
 const Layout = ({ children }) => {
+  // Add this with your other state
+  const [overtimeData, setOvertimeData] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [notificationAnchor, setNotificationAnchor] = useState(null);
   const { user, logout } = useAuth();
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead } =
+    useNotifications();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user?.role === "manager" || user?.role === "admin") {
+      fetchOvertimeSummary();
+    }
+  }, [user]);
+
+  const fetchOvertimeSummary = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.get(
+        `${process.env.REACT_APP_API_URL}/overtime/dashboard`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      setOvertimeData(res.data.data);
+    } catch (error) {
+      console.error("Error fetching overtime summary:", error);
+    }
+  };
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -71,9 +100,9 @@ const Layout = ({ children }) => {
   const handleNotificationItemClick = (notification) => {
     markAsRead(notification._id);
     if (notification.data?.swapRequestId) {
-      navigate('/swaps');
+      navigate("/swaps");
     } else if (notification.data?.shiftId) {
-      navigate('/shifts');
+      navigate("/shifts");
     }
     handleNotificationClose();
   };
@@ -83,29 +112,62 @@ const Layout = ({ children }) => {
     logout();
   };
 
-  // Role-based menu items - STAFF should ONLY see Dashboard, Shifts, Schedule, Swap Requests
+  // Role-based menu items
+  // Manager/Admin menu
   const getMenuItems = () => {
-    // Staff menu - very limited
-    if (user?.role === 'staff') {
+    if (user?.role === "staff") {
       return [
-        { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
-        { text: 'My Shifts', icon: <EventIcon />, path: '/shifts' },
-        { text: 'Schedule', icon: <CalendarIcon />, path: '/schedule' },
-        { text: 'Swap Requests', icon: <SwapHorizIcon />, path: '/swaps' },
+        { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
+        { text: "My Shifts", icon: <EventIcon />, path: "/shifts" },
+        { text: "Schedule", icon: <CalendarIcon />, path: "/schedule" },
+        { text: "Swap Requests", icon: <SwapHorizIcon />, path: "/swaps" },
       ];
     }
 
-    // Manager/Admin menu - full access
-    return [
-      { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
-      { text: 'Shifts', icon: <EventIcon />, path: '/shifts' },
-      { text: 'Schedule', icon: <CalendarIcon />, path: '/schedule' },
-      { text: 'Locations', icon: <LocationIcon />, path: '/locations' },
-      { text: 'Staff', icon: <PeopleIcon />, path: '/staff' },
-      { text: 'Swap Requests', icon: <SwapHorizIcon />, path: '/swaps' },
+    // Manager/Admin menu - start with common items
+    const items = [
+      { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
+      { text: "Shifts", icon: <EventIcon />, path: "/shifts" },
+      { text: "Schedule", icon: <CalendarIcon />, path: "/schedule" },
+      { text: "Swap Requests", icon: <SwapHorizIcon />, path: "/swaps" },
     ];
-  };
 
+    // Add Fairness page here - for both managers and admins
+    items.push({
+      text: "Fairness",
+      icon: <AssessmentIcon />, // Make sure AssessmentIcon is imported
+      path: "/fairness",
+    });
+
+    // ONLY ADMINS can see Locations
+    if (user?.role === "admin") {
+      items.push({
+        text: "Locations",
+        icon: <LocationIcon />,
+        path: "/locations",
+      });
+    }
+
+    // Both admins and managers can see Staff
+    items.push({ text: "Staff", icon: <PeopleIcon />, path: "/staff" });
+
+    // Both admins and managers can see Overtime (with badge)
+    items.push({
+      text: "Overtime",
+      icon: (
+        <Badge
+          badgeContent={overtimeData?.warnings?.length || 0}
+          color="error"
+          variant="dot"
+        >
+          <TimelineIcon />
+        </Badge>
+      ),
+      path: "/overtime",
+    });
+
+    return items;
+  };
   const menuItems = getMenuItems();
 
   const drawer = (
@@ -137,7 +199,7 @@ const Layout = ({ children }) => {
   const notificationOpen = Boolean(notificationAnchor);
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ display: "flex" }}>
       <CssBaseline />
       <AppBar
         position="fixed"
@@ -152,16 +214,17 @@ const Layout = ({ children }) => {
             aria-label="open drawer"
             edge="start"
             onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { sm: 'none' } }}
+            sx={{ mr: 2, display: { sm: "none" } }}
           >
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            {menuItems.find(item => item.path === window.location.pathname)?.text || 'ShiftSync'}
+            {menuItems.find((item) => item.path === window.location.pathname)
+              ?.text || "ShiftSync"}
           </Typography>
 
-          <IconButton 
-            color="inherit" 
+          <IconButton
+            color="inherit"
             sx={{ mr: 2 }}
             onClick={handleNotificationClick}
           >
@@ -171,30 +234,57 @@ const Layout = ({ children }) => {
           </IconButton>
 
           <IconButton onClick={handleMenuOpen} color="inherit">
-            <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
-              {user?.name?.charAt(0) || 'U'}
+            <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main" }}>
+              {user?.name?.charAt(0) || "U"}
             </Avatar>
           </IconButton>
-          
+
           <Menu
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}
             onClose={handleMenuClose}
+            PaperProps={{
+              sx: {
+                mt: 1.5,
+                minWidth: 200,
+                borderRadius: 2,
+                boxShadow: "0 8px 16px rgba(0,0,0,0.1)",
+                "& .MuiMenuItem-root": {
+                  px: 2,
+                  py: 1.5,
+                },
+              },
+            }}
           >
-            <MenuItem disabled>
-              <Typography variant="body2">{user?.name}</Typography>
-            </MenuItem>
-            <MenuItem disabled>
-              <Typography variant="caption" color="textSecondary">
-                {user?.role}
+            <Box sx={{ px: 2, py: 1.5, bgcolor: "#f5f5f5" }}>
+              <Typography
+                variant="subtitle1"
+                sx={{ fontWeight: "bold", color: "primary.main" }}
+              >
+                {user?.name}
               </Typography>
-            </MenuItem>
+              <Chip
+                label={user?.role}
+                size="small"
+                color={
+                  user?.role === "admin"
+                    ? "error"
+                    : user?.role === "manager"
+                      ? "primary"
+                      : "success"
+                }
+                sx={{ mt: 0.5, textTransform: "capitalize" }}
+              />
+            </Box>
             <Divider />
-            <MenuItem onClick={handleLogout}>
+            <MenuItem
+              onClick={handleLogout}
+              sx={{ color: "error.main", "&:hover": { bgcolor: "#ffebee" } }}
+            >
               <ListItemIcon>
-                <LogoutIcon fontSize="small" />
+                <LogoutIcon fontSize="small" color="error" />
               </ListItemIcon>
-              Logout
+              <Typography variant="body2">Logout</Typography>
             </MenuItem>
           </Menu>
         </Toolbar>
@@ -206,18 +296,25 @@ const Layout = ({ children }) => {
         anchorEl={notificationAnchor}
         onClose={handleNotificationClose}
         anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
+          vertical: "bottom",
+          horizontal: "right",
         }}
         transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
+          vertical: "top",
+          horizontal: "right",
         }}
         PaperProps={{
-          sx: { width: 360, maxHeight: 480 }
+          sx: { width: 360, maxHeight: 480 },
         }}
       >
-        <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box
+          sx={{
+            p: 2,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <Typography variant="h6">Notifications</Typography>
           {notifications.length > 0 && (
             <Button size="small" onClick={markAllAsRead}>
@@ -234,13 +331,17 @@ const Layout = ({ children }) => {
                 button
                 onClick={() => handleNotificationItemClick(notification)}
                 sx={{
-                  bgcolor: notification.read ? 'transparent' : 'action.hover',
-                  borderBottom: '1px solid',
-                  borderColor: 'divider'
+                  bgcolor: notification.read ? "transparent" : "action.hover",
+                  borderBottom: "1px solid",
+                  borderColor: "divider",
                 }}
               >
                 <ListItemIcon sx={{ minWidth: 40 }}>
-                  {notification.type?.includes('swap') ? <SwapHorizIcon color="primary" fontSize="small" /> : <NotificationsIcon fontSize="small" />}
+                  {notification.type?.includes("swap") ? (
+                    <SwapHorizIcon color="primary" fontSize="small" />
+                  ) : (
+                    <NotificationsIcon fontSize="small" />
+                  )}
                 </ListItemIcon>
                 <NotificationListItemText
                   primary={notification.title}
@@ -251,7 +352,10 @@ const Layout = ({ children }) => {
                       </Typography>
                       <br />
                       <Typography variant="caption" color="textSecondary">
-                        {formatDistanceToNow(new Date(notification.createdAt || Date.now()), { addSuffix: true })}
+                        {formatDistanceToNow(
+                          new Date(notification.createdAt || Date.now()),
+                          { addSuffix: true },
+                        )}
                       </Typography>
                     </>
                   }
@@ -259,7 +363,7 @@ const Layout = ({ children }) => {
               </NotificationListItem>
             ))
           ) : (
-            <Box sx={{ p: 3, textAlign: 'center' }}>
+            <Box sx={{ p: 3, textAlign: "center" }}>
               <Typography color="textSecondary">No notifications</Typography>
             </Box>
           )}
@@ -276,8 +380,11 @@ const Layout = ({ children }) => {
           onClose={handleDrawerToggle}
           ModalProps={{ keepMounted: true }}
           sx={{
-            display: { xs: 'block', sm: 'none' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            display: { xs: "block", sm: "none" },
+            "& .MuiDrawer-paper": {
+              boxSizing: "border-box",
+              width: drawerWidth,
+            },
           }}
         >
           {drawer}
@@ -285,8 +392,11 @@ const Layout = ({ children }) => {
         <Drawer
           variant="permanent"
           sx={{
-            display: { xs: 'none', sm: 'block' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            display: { xs: "none", sm: "block" },
+            "& .MuiDrawer-paper": {
+              boxSizing: "border-box",
+              width: drawerWidth,
+            },
           }}
           open
         >

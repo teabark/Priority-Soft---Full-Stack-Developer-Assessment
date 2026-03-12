@@ -22,25 +22,31 @@ export const NotificationProvider = ({ children }) => {
   const [connected, setConnected] = useState(false);
   const { user, token } = useAuth();
 
-  // Fetch notifications from API
-  const fetchNotifications = useCallback(async () => {
-    if (!user) return;
+const fetchNotifications = useCallback(async () => {
+  if (!user) return;
 
-    try {
-      const res = await axios.get(
-        `${process.env.REACT_APP_API_URL}/notifications`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      setNotifications(res.data.data || []);
-      setUnreadCount(res.data.unreadCount || 0);
-    } catch (error) {
-      console.error("Error fetching notifications:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [user, token]);
+  try {
+    console.log('📡 Fetching notifications for user:', user.id);
+    const res = await axios.get(
+      `${process.env.REACT_APP_API_URL}/notifications`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    
+    console.log('📡 Notifications response:', res.data);
+    setNotifications(res.data.data || []);
+    
+    // Make sure unreadCount is coming from the response
+    // Your backend should return unreadCount
+    setUnreadCount(res.data.unreadCount || 0);
+    
+  } catch (error) {
+    console.error("Error fetching notifications:", error);
+  } finally {
+    setLoading(false);
+  }
+}, [user, token]); // Add token here
 
 useEffect(() => {
   if (user && token) {
@@ -62,55 +68,83 @@ useEffect(() => {
   };
 }, [user, token, fetchNotifications]);
 
-const connectSocket = () => {
-  try {
-    const newSocket = io(process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000', {
-      auth: { token },
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000
-    });
-
-    newSocket.on('connect', () => {
-      console.log('🔌 Connected to notification server');
-      setConnected(true);
-    });
-
-    newSocket.on('disconnect', () => {
-      console.log('🔌 Disconnected from notification server');
-      setConnected(false);
-    });
-
-    newSocket.on('connect_error', (error) => {
-      console.error('❌ Socket connection error:', error);
-    });
-
-    newSocket.on('notification:new', (data) => {
-      console.log('📢 New notification:', data);
-      
-      if (!data || !data.message) {
-        console.warn('⚠️ Received invalid notification:', data);
-        return;
+useEffect(() => {
+  const initializeNotifications = async () => {
+    if (user && token) {
+      console.log('🔔 Initializing notifications for user:', user.id);
+      await fetchNotifications();
+      connectSocket();
+    } else {
+      setNotifications([]);
+      setUnreadCount(0);
+      if (socket) {
+        socket.disconnect();
+        setSocket(null);
       }
-      
-      setNotifications(prev => [data, ...prev]);
-      setUnreadCount(prev => prev + 1);
+    }
+  };
 
-      toast.info(
-        <div>
-          <strong>{data.title || 'Notification'}</strong>
-          <p>{data.message}</p>
-        </div>,
-        { position: "top-right", autoClose: 5000 }
+  initializeNotifications();
+
+  return () => {
+    if (socket) {
+      socket.disconnect();
+    }
+  };
+}, [user, token]); 
+
+  const connectSocket = () => {
+    try {
+      const newSocket = io(
+        process.env.REACT_APP_SOCKET_URL || "http://localhost:5000",
+        {
+          auth: { token },
+          transports: ["websocket"],
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+        },
       );
-    });
 
-    setSocket(newSocket);
-  } catch (error) {
-    console.error('❌ Error creating socket connection:', error);
-  }
-};
+      newSocket.on("connect", () => {
+        console.log("🔌 Connected to notification server");
+        setConnected(true);
+      });
+
+      newSocket.on("disconnect", () => {
+        console.log("🔌 Disconnected from notification server");
+        setConnected(false);
+      });
+
+      newSocket.on("connect_error", (error) => {
+        console.error("❌ Socket connection error:", error);
+      });
+
+      newSocket.on("notification:new", (data) => {
+        console.log("📢 New notification:", data);
+
+        if (!data || !data.message) {
+          console.warn("⚠️ Received invalid notification:", data);
+          return;
+        }
+
+        setNotifications((prev) => [data, ...prev]);
+        setUnreadCount((prev) => prev + 1);
+
+        toast.info(
+          <div>
+            <strong>{data.title || "Notification"}</strong>
+            <p>{data.message}</p>
+          </div>,
+          { position: "top-right", autoClose: 5000 },
+        );
+      });
+
+      setSocket(newSocket);
+    } catch (error) {
+      console.error("❌ Error creating socket connection:", error);
+    }
+  };
 
   const markAsRead = async (notificationId) => {
     try {

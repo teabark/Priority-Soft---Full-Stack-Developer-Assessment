@@ -25,8 +25,10 @@ import {
   Warning as WarningIcon
 } from '@mui/icons-material';
 import axios from 'axios';
+import { useAuth } from '../../context/AuthContext';
 
 const ScheduleCalendar = () => {
+  const { user } = useAuth();
   const [shifts, setShifts] = useState([]);
   const [locations, setLocations] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -174,35 +176,28 @@ const ScheduleCalendar = () => {
     return 'draft';
   };
 
-const handlePublishWeek = () => {
-  console.log('📅 Publish week clicked');
-  console.log('📅 canEditWeek:', canEditWeek());
-  console.log('📅 weekStatus:', weekStatus);
-  
-  if (!canEditWeek()) {
-    console.log('⛔ Cannot publish - within 48-hour cutoff');
-    setCutoffWarning(true);
-    return;
-  }
-  setSelectedWeek(getWeekStart());
-  setPublishDialog(true);
-};
-
-const handleUnpublishWeek = () => {
-  console.log('📅 Unpublish week clicked');
-  console.log('📅 canEditWeek:', canEditWeek());
-  
-  if (!canEditWeek()) {
-    console.log('⛔ Cannot unpublish - within 48-hour cutoff');
-    setCutoffWarning(true);
-    return;
-  }
-  setSelectedWeek(getWeekStart());
-  setUnpublishDialog(true);
-};
-
-  const handleUnpublishWeek = () => {
+  // SINGLE handlePublishWeek function
+  const handlePublishWeek = () => {
+    console.log('📅 Publish week clicked');
+    console.log('📅 canEditWeek:', canEditWeek());
+    console.log('📅 weekStatus:', getWeekStatus());
+    
     if (!canEditWeek()) {
+      console.log('⛔ Cannot publish - within 48-hour cutoff');
+      setCutoffWarning(true);
+      return;
+    }
+    setSelectedWeek(getWeekStart());
+    setPublishDialog(true);
+  };
+
+  // SINGLE handleUnpublishWeek function - KEEP ONLY THIS ONE
+  const handleUnpublishWeek = () => {
+    console.log('📅 Unpublish week clicked');
+    console.log('📅 canEditWeek:', canEditWeek());
+    
+    if (!canEditWeek()) {
+      console.log('⛔ Cannot unpublish - within 48-hour cutoff');
       setCutoffWarning(true);
       return;
     }
@@ -210,79 +205,73 @@ const handleUnpublishWeek = () => {
     setUnpublishDialog(true);
   };
 
-  
+const confirmPublish = async () => {
+  try {
+    const weekStart = getWeekStart();
+    const token = localStorage.getItem('token');
+    
+    // Get manager's locations from your user context
+    const locations = user?.locations || []; // You'll need to get user from auth
+    
+    const res = await axios.post(
+      `${process.env.REACT_APP_API_URL}/schedules/publish-week`,
+      {
+        weekStartDate: weekStart,
+        locationIds: locations
+      },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
 
-  const confirmPublish = async () => {
-    try {
-      const weekStart = getWeekStart();
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 7);
-      
-      const weekShifts = shifts.filter(shift => {
-        const shiftDate = new Date(shift.startTime);
-        return shiftDate >= weekStart && shiftDate < weekEnd;
-      });
+    setPublishDialog(false);
+    fetchShifts();
+    setSnackbar({
+      open: true,
+      message: res.data.message || `Schedule published successfully!`,
+      severity: 'success'
+    });
+  } catch (error) {
+    console.error('Error publishing:', error);
+    setSnackbar({
+      open: true,
+      message: error.response?.data?.message || 'Error publishing schedule',
+      severity: 'error'
+    });
+  }
+};
 
-      const token = localStorage.getItem('token');
-      for (const shift of weekShifts) {
-        await axios.put(
-          `${process.env.REACT_APP_API_URL}/shifts/${shift._id}`,
-          { status: 'published' },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-      }
+const confirmUnpublish = async () => {
+  try {
+    const weekStart = getWeekStart();
+    const token = localStorage.getItem('token');
+    
+    // Get manager's locations from your user context
+    const locations = user?.locations || [];
+    
+    const res = await axios.post(
+      `${process.env.REACT_APP_API_URL}/schedules/unpublish-week`,
+      {
+        weekStartDate: weekStart,
+        locationIds: locations
+      },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
 
-      setPublishDialog(false);
-      fetchShifts();
-      setSnackbar({
-        open: true,
-        message: `Schedule for week of ${weekStart.toLocaleDateString()} published!`,
-        severity: 'success'
-      });
-    } catch (error) {
-      setSnackbar({
-        open: true,
-        message: 'Error publishing schedule',
-        severity: 'error'
-      });
-    }
-  };
-
-  const confirmUnpublish = async () => {
-    try {
-      const weekStart = getWeekStart();
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 7);
-      
-      const weekShifts = shifts.filter(shift => {
-        const shiftDate = new Date(shift.startTime);
-        return shiftDate >= weekStart && shiftDate < weekEnd;
-      });
-
-      const token = localStorage.getItem('token');
-      for (const shift of weekShifts) {
-        await axios.put(
-          `${process.env.REACT_APP_API_URL}/shifts/${shift._id}`,
-          { status: 'draft' },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-      }
-
-      setUnpublishDialog(false);
-      fetchShifts();
-      setSnackbar({
-        open: true,
-        message: `Schedule for week of ${weekStart.toLocaleDateString()} unpublished.`,
-        severity: 'warning'
-      });
-    } catch (error) {
-      setSnackbar({
-        open: true,
-        message: 'Error unpublishing schedule',
-        severity: 'error'
-      });
-    }
-  };
+    setUnpublishDialog(false);
+    fetchShifts();
+    setSnackbar({
+      open: true,
+      message: res.data.message || `Schedule unpublished successfully`,
+      severity: 'warning'
+    });
+  } catch (error) {
+    console.error('Error unpublishing:', error);
+    setSnackbar({
+      open: true,
+      message: error.response?.data?.message || 'Error unpublishing schedule',
+      severity: 'error'
+    });
+  }
+};
 
   const getStatusColor = (status) => {
     switch (status) {

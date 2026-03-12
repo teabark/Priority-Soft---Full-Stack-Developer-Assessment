@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { io } from 'socket.io-client';
-import { useAuth } from './AuthContext';
-import { toast } from 'react-toastify';
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { io } from "socket.io-client";
+import { useAuth } from "./AuthContext";
+import { toast } from "react-toastify";
 
 const SocketContext = createContext();
 
@@ -16,35 +16,36 @@ export const SocketProvider = ({ children }) => {
     if (user && token) {
       // Connect to socket
       const newSocket = io(process.env.REACT_APP_SOCKET_URL, {
-        auth: { token }
+        auth: { token },
       });
 
-      newSocket.on('connect', () => {
-        console.log('🔌 Connected to WebSocket');
+      newSocket.on("connect", () => {
+        console.log("🔌 Connected to WebSocket");
       });
 
-      newSocket.on('notification:new', (data) => {
-        toast.info(data.notification.message);
-      });
+      // newSocket.on("notification:new", (data) => {
+      //   console.log("📢 New notification:", data); // Add this for debugging
+      //   toast.info(data.message); // Changed from data.notification.message
+      // });
 
-      newSocket.on('shift:assigned', (data) => {
+      newSocket.on("shift:assigned", (data) => {
         toast.info(`New shift assigned: ${data.message}`);
       });
 
-      newSocket.on('shift:published', (data) => {
-        toast.info('New shifts published!');
+      newSocket.on("shift:published", (data) => {
+        toast.info("New shifts published!");
       });
 
-      newSocket.on('swap:requested', (data) => {
-        toast.info('New swap request received');
+      newSocket.on("swap:requested", (data) => {
+        toast.info("New swap request received");
       });
 
-      newSocket.on('user:status-change', (data) => {
-        setOnlineUsers(prev => {
+      newSocket.on("user:status-change", (data) => {
+        setOnlineUsers((prev) => {
           if (data.isOnline) {
             return [...prev, data.user];
           } else {
-            return prev.filter(u => u.id !== data.userId);
+            return prev.filter((u) => u.id !== data.userId);
           }
         });
       });
@@ -59,15 +60,15 @@ export const SocketProvider = ({ children }) => {
 
   // Emit events
   const emitShiftCreated = (shiftData) => {
-    socket?.emit('shift:create', shiftData);
+    socket?.emit("shift:create", shiftData);
   };
 
   const emitShiftAssigned = (data) => {
-    socket?.emit('shift:assign', data);
+    socket?.emit("shift:assign", data);
   };
 
   const emitSwapRequest = (data) => {
-    socket?.emit('swap:request', data);
+    socket?.emit("swap:request", data);
   };
 
   const value = {
@@ -75,12 +76,10 @@ export const SocketProvider = ({ children }) => {
     onlineUsers,
     emitShiftCreated,
     emitShiftAssigned,
-    emitSwapRequest
+    emitSwapRequest,
   };
 
   return (
-    <SocketContext.Provider value={value}>
-      {children}
-    </SocketContext.Provider>
+    <SocketContext.Provider value={value}>{children}</SocketContext.Provider>
   );
 };

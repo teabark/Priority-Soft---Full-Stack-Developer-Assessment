@@ -28,6 +28,9 @@
     "socket.io-client": "^4.8.3",
     "web-vitals": "^2.1.4"
   },
+  "devDependencies": {
+    "eslint": "^8.56.0"
+  },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",

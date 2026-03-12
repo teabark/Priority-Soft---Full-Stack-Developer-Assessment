@@ -22,6 +22,8 @@ import {
   Tabs,
   CircularProgress,
   Snackbar,
+  Avatar,
+  Divider,
 } from "@mui/material";
 import {
   SwapHoriz as SwapIcon,
@@ -31,10 +33,18 @@ import {
   EventBusy as DropIcon,
   EventAvailable as PickupIcon,
   Refresh as RefreshIcon,
+  Person as PersonIcon,
+  Note as NoteIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
+  Check as CheckIcon, // Add this
+  HourglassEmpty as HourglassEmptyIcon, // Add this
 } from "@mui/icons-material";
 import Layout from "../components/layout/Layout";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
+import { useOvertime } from "../context/OvertimeContext";
+import OvertimeWarning from "../components/overtime/OvertimeWarning";
 
 const SwapRequests = () => {
   console.log("🔥🔥🔥 SWAP REQUESTS PAGE LOADED 🔥🔥🔥");
@@ -58,6 +68,10 @@ const SwapRequests = () => {
     message: "",
     severity: "success",
   });
+  const { checkAssignment, overrideConsecutiveDays } = useOvertime();
+  // const [pickupOvertimeCheck, setPickupOvertimeCheck] = useState(null);
+  const [checkingPickupOvertime, setCheckingPickupOvertime] = useState(false);
+  // const [selectedPickupShift, setSelectedPickupShift] = useState(null);
 
   const { user, token, loading: authLoading } = useAuth();
   const isManager = user?.role === "admin" || user?.role === "manager";
@@ -70,6 +84,40 @@ const SwapRequests = () => {
   console.log("📊 User role:", user?.role);
   console.log("📊 Auth loading:", authLoading);
   console.log("📊 Token exists:", !!token);
+
+  // Calculate tabs based on role
+  const getTabs = () => {
+    const tabs = [];
+
+    // Only staff can see "My Shifts"
+    if (isStaff) {
+      tabs.push({ label: "My Shifts", index: 0 });
+    }
+
+    if (isStaff) {
+      tabs.push({ label: "My Requests", index: tabs.length });
+      tabs.push({ label: "Available Shifts", index: tabs.length });
+    }
+
+    if (isManager) {
+      tabs.push({ label: "Pending Approvals", index: 0 });
+    }
+
+    return tabs;
+  };
+
+  const tabs = getTabs();
+
+  // Determine which tab content to show
+  const showMyShifts = isStaff && tabValue === 0;
+  const showMyRequests = isStaff && tabValue === (isStaff ? 1 : -1);
+  const showAvailableShifts = isStaff && tabValue === (isStaff ? 2 : -1);
+  const showPendingApprovals = isManager && tabValue === 0;
+
+  // Reset tab when role changes
+  useEffect(() => {
+    setTabValue(0);
+  }, [isStaff, isManager]);
 
   // Fetch data only when auth is ready
   useEffect(() => {
@@ -173,30 +221,32 @@ const SwapRequests = () => {
           headers: { Authorization: `Bearer ${token}` },
         },
       );
-      console.log("✅ My requests response:", res.data);
-      console.log("📊 My requests count:", res.data.data?.length);
-      console.log(
-        "📊 My requests data:",
-        JSON.stringify(res.data.data, null, 2),
-      );
 
-      // Check if the data matches the current user
-      if (res.data.data && res.data.data.length > 0) {
-        console.log("First request:", res.data.data[0]);
-        console.log("Current user ID:", user?.id);
-        console.log("Requesting staff ID:", res.data.data[0].requestingStaff);
-        console.log("Target staff ID:", res.data.data[0].targetStaff);
-      }
+      let requests = res.data.data || [];
 
-      setMyRequests(res.data.data || []);
+      // Sort: pending first, then pending_approval, then others
+      requests.sort((a, b) => {
+        const statusOrder = {
+          pending: 1,
+          pending_approval: 2,
+          approved: 3,
+          rejected: 4,
+          cancelled: 5,
+        };
+        return (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99);
+      });
+
+      setMyRequests(requests);
     } catch (error) {
       console.error("❌ Error fetching my requests:", error);
-      console.error("Error response:", error.response?.data);
     }
   };
 
   const fetchPendingApprovals = async () => {
-    if (!isManager) return;
+    if (!isManager) {
+      console.log("⏭️ Skipping pending approvals - not a manager");
+      return;
+    }
     try {
       console.log("📡 Fetching pending approvals for manager...");
       const token = localStorage.getItem("token");
@@ -215,28 +265,29 @@ const SwapRequests = () => {
     }
   };
 
-const fetchAvailableShifts = async () => {
-  if (!isStaff) return;
-  try {
-    console.log('📡 Fetching available shifts...');
-    const token = localStorage.getItem('token');
-    const res = await axios.get(
-      `${process.env.REACT_APP_API_URL}/swaps/available`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    console.log('✅ Available shifts response:', res.data);
-    
-    // The backend should already filter, but just in case:
-    const filtered = (res.data.data || []).filter(shift => 
-      !shift.assignedStaff?.includes(user?.id) && 
-      !shift.assignedStaff?.includes(user?._id)
-    );
-    
-    setAvailableShifts(filtered);
-  } catch (error) {
-    console.error("❌ Error fetching available shifts:", error);
-  }
-};
+  const fetchAvailableShifts = async () => {
+    if (!isStaff) return;
+    try {
+      console.log("📡 Fetching available shifts...");
+      const token = localStorage.getItem("token");
+      const res = await axios.get(
+        `${process.env.REACT_APP_API_URL}/swaps/available`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      console.log("✅ Available shifts response:", res.data);
+
+      // The backend should already filter, but just in case:
+      const filtered = (res.data.data || []).filter(
+        (shift) =>
+          !shift.assignedStaff?.includes(user?.id) &&
+          !shift.assignedStaff?.includes(user?._id),
+      );
+
+      setAvailableShifts(filtered);
+    } catch (error) {
+      console.error("❌ Error fetching available shifts:", error);
+    }
+  };
 
   const showMessage = (severity, message) => {
     setSnackbar({ open: true, severity, message });
@@ -265,7 +316,13 @@ const fetchAvailableShifts = async () => {
 
     setSubmitting(true);
     try {
-      console.log("📤 Submitting swap request:", {
+      const token = localStorage.getItem("token");
+
+      console.log(
+        "📤 Sending request to:",
+        `${process.env.REACT_APP_API_URL}/swaps/request`,
+      );
+      console.log("📤 Payload:", {
         shiftId: selectedShift._id,
         targetStaffId: selectedTargetStaff,
         type: "swap",
@@ -283,16 +340,14 @@ const fetchAvailableShifts = async () => {
         { headers: { Authorization: `Bearer ${token}` } },
       );
 
-      console.log("✅ Swap request response:", res.data);
+      console.log("✅ Response:", res.data);
       showMessage("success", "Swap request submitted successfully!");
       setOpenSwapDialog(false);
       fetchAllData();
     } catch (error) {
-      console.error("❌ Error submitting swap:", error);
-      console.error("Error response:", error.response?.data);
-      const message =
-        error.response?.data?.message || "Failed to submit swap request";
-      showMessage("error", message);
+      console.error("❌ Error:", error);
+      console.error("Response:", error.response?.data);
+      showMessage("error", error.response?.data?.message || "Request failed");
     } finally {
       setSubmitting(false);
     }
@@ -356,66 +411,200 @@ const fetchAvailableShifts = async () => {
     }
   };
 
-  const handleRejectRequest = async (request, shift) => {
-    try {
-      await axios.put(
-        `${process.env.REACT_APP_API_URL}/swaps/${request._id}`,
-        { status: "rejected" },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-
-      showMessage("success", "Request rejected");
-      fetchAllData();
-    } catch (error) {
-      const message =
-        error.response?.data?.message || "Failed to reject request";
-      showMessage("error", message);
-    }
-  };
-
   const handleCancelRequest = async (requestId) => {
+    console.log("🗑️ Attempting to cancel request:", requestId);
+    console.log("👤 Current user:", user?._id || user?.id);
+
+    // Find the request in myRequests to check who created it
+    const request = myRequests.find((r) => r._id === requestId);
+    console.log("📋 Request details:", {
+      requestId: request?._id,
+      requestingStaff: request?.requestingStaff,
+      type: request?.type,
+    });
+
     if (!window.confirm("Are you sure you want to cancel this request?"))
       return;
 
     try {
+      const token = localStorage.getItem("token");
+
       await axios.delete(
         `${process.env.REACT_APP_API_URL}/swaps/${requestId}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
 
-      showMessage("success", "Request cancelled");
+      showMessage("success", "Request cancelled successfully");
       fetchAllData();
     } catch (error) {
+      console.error("❌ Error cancelling request:", error);
+      console.error("❌ Response:", error.response?.data);
       const message =
         error.response?.data?.message || "Failed to cancel request";
       showMessage("error", message);
     }
   };
 
-const handlePickupShift = async (shift) => {
-  try {
-    console.log('📤 Picking up shift:', shift._id);
-    const token = localStorage.getItem('token');
-    
-    // Instead of creating a swap request, directly assign the shift
-    const res = await axios.put(
-      `${process.env.REACT_APP_API_URL}/shifts/${shift._id}/assign`,
-      { 
-        staffId: user?.id || user?._id,
-        reason: 'Picked up from available shifts'
-      },
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+  // Update handlePickupClick to perform the pickup directly
+  const handlePickupClick = async (shift) => {
+    try {
+      console.log("📤 Picking up shift:", shift._id);
+      const token = localStorage.getItem("token");
+      const staffId = user?.id || user?._id;
 
-    console.log('✅ Pickup successful:', res.data);
-    showMessage("success", "Shift picked up successfully!");
-    fetchAllData();
-  } catch (error) {
-    console.error("❌ Error picking up shift:", error);
-    const message = error.response?.data?.message || "Failed to pick up shift";
-    showMessage("error", message);
-  }
-};
+      setCheckingPickupOvertime(true);
+
+      const res = await axios.put(
+        `${process.env.REACT_APP_API_URL}/shifts/${shift._id}/assign`,
+        {
+          staffId: staffId,
+          reason: "Picked up from available shifts",
+        },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      console.log("✅ Pickup successful:", res.data);
+      showMessage("success", "Shift picked up successfully!");
+      fetchAllData();
+    } catch (error) {
+      console.error("❌ Error picking up shift:", error);
+      const message =
+        error.response?.data?.message || "Failed to pick up shift";
+      showMessage("error", message);
+    } finally {
+      setCheckingPickupOvertime(false);
+      // setSelectedPickupShift(null);
+    }
+  };
+
+  // New function to actually perform pickup after checks
+  // const confirmPickup = async (shift) => {
+  //   const confirm = window.confirm(
+  //     `Are you sure you want to pick up this shift?\n\n` +
+  //       `Location: ${shift.location?.name}\n` +
+  //       `Date: ${new Date(shift.startTime).toLocaleDateString()}\n` +
+  //       `Time: ${new Date(shift.startTime).toLocaleTimeString()} - ${new Date(shift.endTime).toLocaleTimeString()}`,
+  //   );
+
+  //   if (!confirm) return;
+
+  //   try {
+  //     const token = localStorage.getItem("token");
+  //     const staffId = user?.id || user?._id;
+
+  //     const res = await axios.put(
+  //       `${process.env.REACT_APP_API_URL}/shifts/${shift._id}/assign`,
+  //       {
+  //         staffId: staffId,
+  //         reason: "Picked up from available shifts",
+  //       },
+  //       { headers: { Authorization: `Bearer ${token}` } },
+  //     );
+
+  //     showMessage("success", "Shift picked up successfully!");
+  //     // setPickupOvertimeCheck(null);
+  //     // setSelectedPickupShift(null);
+  //     fetchAllData();
+  //   } catch (error) {
+  //     const message =
+  //       error.response?.data?.message || "Failed to pick up shift";
+  //     showMessage("error", message);
+  //   }
+  // };
+
+  // // Handle override for pickup
+  // const handlePickupOverride = async (reason) => {
+  //   if (selectedPickupShift) {
+  //     await overrideConsecutiveDays(
+  //       user?._id || user?.id,
+  //       selectedPickupShift._id,
+  //       reason,
+  //     );
+  //     // Recheck after override
+  // handlePickupClick(selectedPickupShift);
+  //   }
+  // };
+
+  const handleAcceptRequest = async (requestId) => {
+    try {
+      console.log("✅ Accepting request:", requestId);
+      const token = localStorage.getItem("token");
+
+      const res = await axios.put(
+        `${process.env.REACT_APP_API_URL}/swaps/${requestId}`,
+        { status: "accepted" }, // Target staff accepts
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      console.log("✅ Accept response:", res.data);
+      showMessage(
+        "success",
+        "Swap request accepted! Waiting for manager approval.",
+      );
+      fetchAllData();
+    } catch (error) {
+      console.error("❌ Error accepting request:", error);
+      const message =
+        error.response?.data?.message || "Failed to accept request";
+      showMessage("error", message);
+    }
+  };
+
+  const handleRejectRequest = async (requestId) => {
+    try {
+      console.log("❌ Rejecting request:", requestId);
+      const token = localStorage.getItem("token");
+
+      const res = await axios.put(
+        `${process.env.REACT_APP_API_URL}/swaps/${requestId}`,
+        { status: "rejected" },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      console.log("✅ Reject response:", res.data);
+      showMessage("success", "Swap request rejected");
+      fetchAllData();
+    } catch (error) {
+      console.error("❌ Error rejecting request:", error);
+      const message =
+        error.response?.data?.message || "Failed to reject request";
+      showMessage("error", message);
+    }
+  };
+
+  const handlePickupShift = async (shift) => {
+    try {
+      console.log("📤 Picking up shift:", shift._id);
+      const token = localStorage.getItem("token");
+      const staffId = user?.id || user?._id;
+
+      console.log("📤 Staff ID:", staffId);
+      console.log(
+        "📤 API URL:",
+        `${process.env.REACT_APP_API_URL}/shifts/${shift._id}/assign`,
+      );
+
+      const res = await axios.put(
+        `${process.env.REACT_APP_API_URL}/shifts/${shift._id}/assign`,
+        {
+          staffId: staffId,
+          reason: "Picked up from available shifts",
+        },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      console.log("✅ Pickup successful:", res.data);
+      showMessage("success", "Shift picked up successfully!");
+      fetchAllData();
+    } catch (error) {
+      console.error("❌ Error picking up shift:", error);
+      console.error("❌ Error response:", error.response?.data);
+      console.error("❌ Error status:", error.response?.status);
+      const message =
+        error.response?.data?.message || "Failed to pick up shift";
+      showMessage("error", message);
+    }
+  };
 
   const getStaffName = (staffId) => {
     if (!staffId) return "Unknown";
@@ -440,13 +629,6 @@ const handlePickupShift = async (shift) => {
     }
   };
 
-  // Define tab display conditions
-  const showMyShifts =
-    (isStaff && tabValue === 2) || (isManager && tabValue === 1);
-  const showMyRequests = isStaff && tabValue === 0;
-  const showAvailableShifts = isStaff && tabValue === 1;
-  const showPendingApprovals = isManager && tabValue === 0;
-
   if (loading || authLoading) {
     return (
       <Layout>
@@ -464,32 +646,6 @@ const handlePickupShift = async (shift) => {
 
   return (
     <Layout>
-      {/* TEMPORARY TEST BUTTON - Highly visible */}
-      <Box
-        sx={{
-          position: "fixed",
-          top: 10,
-          left: 10,
-          zIndex: 99999,
-          backgroundColor: "red",
-          p: 2,
-          borderRadius: 1,
-        }}
-      >
-        <Button
-          variant="contained"
-          color="warning"
-          size="large"
-          onClick={() => {
-            console.log("🧪 TEST BUTTON CLICKED");
-            alert("Test button clicked!");
-            setOpenSwapDialog(true);
-          }}
-        >
-          🧪 TEST DIALOG
-        </Button>
-      </Box>
-
       <Box sx={{ p: 3 }}>
         <Box
           display="flex"
@@ -507,296 +663,1233 @@ const handlePickupShift = async (shift) => {
           </Button>
         </Box>
 
-        {/* Tabs for different views */}
+        {/* Tabs for different views - FIXED VERSION */}
         <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
           <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
-            {isStaff && <Tab label="My Requests" />}
-            {isStaff && <Tab label="Available Shifts" />}
-            {isManager && <Tab label="Pending Approvals" />}
-            <Tab label="My Shifts" />
+            {tabs.map((tab) => (
+              <Tab key={tab.index} label={tab.label} />
+            ))}
           </Tabs>
         </Box>
 
-        {/* My Shifts Tab */}
+        {/* My Shifts Tab - STYLED LIKE MY REQUESTS */}
         {showMyShifts && (
-          <Grid container spacing={3}>
-            {shifts
-              .filter((shift) => {
-                return shift.assignedStaff?.some((s) => {
-                  const staffId = s._id || s;
-                  return staffId === user?._id || staffId === user?.id;
-                });
-              })
-              .map((shift) => (
-                <Grid size={{ xs: 12, md: 6 }} key={shift._id}>
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h6">
-                        {shift.location?.name}
-                      </Typography>
-                      <Typography color="textSecondary">
-                        {new Date(shift.startTime).toLocaleDateString()} •{" "}
-                        {new Date(shift.startTime).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}{" "}
-                        -{" "}
-                        {new Date(shift.endTime).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </Typography>
-                      <Typography variant="body2" sx={{ mt: 1 }}>
-                        Skill: {shift.requiredSkill} • Staff:{" "}
-                        {shift.assignedStaff?.length}/{shift.requiredCount}
-                      </Typography>
-                      <Box mt={2} display="flex" gap={1}>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<SwapIcon />}
-                          onClick={() => handleRequestSwap(shift)}
-                          disabled={staff.length < 2}
-                        >
-                          Request Swap
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color="warning"
-                          startIcon={<DropIcon />}
-                          onClick={() => handleRequestDrop(shift)}
-                        >
-                          Drop Shift
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            {shifts.filter((shift) =>
-              shift.assignedStaff?.some((s) => {
-                const staffId = s._id || s;
-                return staffId === user?._id || staffId === user?.id;
-              }),
-            ).length === 0 && (
-              <Grid size={12}>
-                <Alert severity="info">
-                  You don't have any assigned shifts
-                </Alert>
-              </Grid>
-            )}
-          </Grid>
-        )}
+          <Box sx={{ width: "100%" }}>
+            {/* Header Section */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h5" gutterBottom>
+                My Assigned Shifts
+              </Typography>
+              <Box
+                sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}
+              >
+                <Chip
+                  label={`${
+                    shifts.filter((shift) =>
+                      shift.assignedStaff?.some((s) => {
+                        const staffId = s._id || s;
+                        return staffId === user?._id || staffId === user?.id;
+                      }),
+                    ).length
+                  } Shifts`}
+                  color="primary"
+                  sx={{ fontWeight: "bold" }}
+                />
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                View and manage your upcoming shifts
+              </Typography>
+            </Box>
 
-        {/* My Requests Tab (Staff) */}
-        {showMyRequests && (
-          <Grid container spacing={3}>
-            {myRequests.length > 0 ? (
-              myRequests.map((req) => (
-                <Grid size={12} key={req._id}>
-                  <Card>
-                    <CardContent>
+            {/* Cards Grid - 2 columns on desktop */}
+            <Grid container spacing={3}>
+              {shifts
+                .filter((shift) => {
+                  return shift.assignedStaff?.some((s) => {
+                    const staffId = s._id || s;
+                    return staffId === user?._id || staffId === user?.id;
+                  });
+                })
+                .map((shift) => (
+                  <Grid item xs={12} md={6} key={shift._id}>
+                    <Card
+                      sx={{
+                        borderRadius: 2,
+                        boxShadow: 3,
+                        height: "100%",
+                        position: "relative",
+                        overflow: "visible",
+                        "&:hover": {
+                          boxShadow: 6,
+                          transform: "translateY(-2px)",
+                          transition: "all 0.2s",
+                        },
+                      }}
+                    >
+                      {/* Status ribbon */}
                       <Box
-                        display="flex"
-                        justifyContent="space-between"
-                        alignItems="center"
+                        sx={{
+                          position: "absolute",
+                          top: 12,
+                          right: -4,
+                          bgcolor:
+                            shift.status === "published"
+                              ? "#4caf50"
+                              : shift.status === "draft"
+                                ? "#ff9800"
+                                : "#2196f3",
+                          color: "white",
+                          px: 2,
+                          py: 0.5,
+                          borderTopLeftRadius: 4,
+                          borderBottomLeftRadius: 4,
+                          fontWeight: "bold",
+                          fontSize: "0.75rem",
+                          textTransform: "uppercase",
+                          boxShadow: 1,
+                        }}
                       >
-                        <Typography variant="subtitle1">
-                          {req.type === "swap"
-                            ? "Swap Request"
-                            : "Drop Request"}
-                        </Typography>
-                        <Chip
-                          label={req.status}
-                          size="small"
-                          color={getStatusColor(req.status)}
-                        />
+                        {shift.status === "published"
+                          ? "PUBLISHED"
+                          : shift.status === "draft"
+                            ? "DRAFT"
+                            : shift.status?.toUpperCase()}
                       </Box>
-                      <Typography variant="body2" sx={{ mt: 1 }}>
-                        <strong>Shift:</strong> {req.shiftInfo?.location?.name}{" "}
-                        • {new Date(req.shiftInfo?.startTime).toLocaleString()}
-                      </Typography>
-                      {req.targetStaff && (
-                        <Typography variant="body2">
-                          <strong>With:</strong> {getStaffName(req.targetStaff)}
-                        </Typography>
-                      )}
-                      {req.notes && (
-                        <Typography
-                          variant="body2"
-                          sx={{ mt: 1, fontStyle: "italic" }}
-                        >
-                          "{req.notes}"
-                        </Typography>
-                      )}
-                      {req.status === "pending" && (
-                        <Box mt={2}>
-                          <Button
-                            size="small"
-                            color="error"
-                            onClick={() => handleCancelRequest(req._id)}
+
+                      <CardContent>
+                        {/* Header with icon and location */}
+                        <Box display="flex" alignItems="center" gap={1} mb={2}>
+                          <Avatar
+                            sx={{
+                              bgcolor: "#1976d2",
+                              width: 40,
+                              height: 40,
+                            }}
                           >
-                            Cancel Request
+                            <SwapIcon />
+                          </Avatar>
+                          <Box>
+                            <Typography
+                              variant="h6"
+                              sx={{ fontWeight: "bold" }}
+                            >
+                              {shift.location?.name || "Unknown Location"}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {shift.requiredSkill} •{" "}
+                              {shift.assignedStaff?.length}/
+                              {shift.requiredCount} assigned
+                            </Typography>
+                          </Box>
+                        </Box>
+
+                        <Divider sx={{ my: 2 }} />
+
+                        {/* Shift Details */}
+                        <Box
+                          sx={{
+                            bgcolor: "#f5f5f5",
+                            p: 2,
+                            borderRadius: 1,
+                            mb: 2,
+                          }}
+                        >
+                          <Typography
+                            variant="subtitle2"
+                            color="text.secondary"
+                            gutterBottom
+                          >
+                            SHIFT DETAILS
+                          </Typography>
+                          <Grid container spacing={1}>
+                            <Grid item xs={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Date
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {shift.startTime
+                                  ? new Date(
+                                      shift.startTime,
+                                    ).toLocaleDateString([], {
+                                      weekday: "short",
+                                      month: "short",
+                                      day: "numeric",
+                                    })
+                                  : "Unknown"}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Time
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {shift.startTime
+                                  ? new Date(
+                                      shift.startTime,
+                                    ).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : "??"}{" "}
+                                -
+                                {shift.endTime
+                                  ? new Date(shift.endTime).toLocaleTimeString(
+                                      [],
+                                      {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      },
+                                    )
+                                  : "??"}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Skill Required
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {shift.requiredSkill || "Unknown"}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Your Role
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {shift.requiredSkill}
+                              </Typography>
+                            </Grid>
+                          </Grid>
+                        </Box>
+
+                        {/* Action Buttons */}
+                        <Box
+                          display="flex"
+                          gap={1}
+                          justifyContent="center"
+                          mt={2}
+                        >
+                          <Button
+                            size="medium"
+                            variant="outlined"
+                            startIcon={<SwapIcon />}
+                            onClick={() => handleRequestSwap(shift)}
+                            disabled={staff.length < 2}
+                            sx={{
+                              borderRadius: 2,
+                              flex: 1,
+                              "&:hover": {
+                                bgcolor: "#e3f2fd",
+                              },
+                            }}
+                          >
+                            Request Swap
+                          </Button>
+                          <Button
+                            size="medium"
+                            variant="outlined"
+                            color="warning"
+                            startIcon={<DropIcon />}
+                            onClick={() => handleRequestDrop(shift)}
+                            sx={{
+                              borderRadius: 2,
+                              flex: 1,
+                              "&:hover": {
+                                bgcolor: "#fff3e0",
+                              },
+                            }}
+                          >
+                            Drop Shift
                           </Button>
                         </Box>
-                      )}
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))}
+
+              {/* Empty state */}
+              {shifts.filter((shift) =>
+                shift.assignedStaff?.some((s) => {
+                  const staffId = s._id || s;
+                  return staffId === user?._id || staffId === user?.id;
+                }),
+              ).length === 0 && (
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 4, textAlign: "center", bgcolor: "#f5f5f5" }}>
+                    <SwapIcon sx={{ fontSize: 60, color: "#9e9e9e", mb: 2 }} />
+                    <Typography
+                      variant="h6"
+                      color="text.secondary"
+                      gutterBottom
+                    >
+                      No Shifts Assigned
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      You don't have any upcoming shifts assigned to you.
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mt: 1 }}
+                    >
+                      Check back later or contact your manager.
+                    </Typography>
+                  </Paper>
                 </Grid>
-              ))
-            ) : (
-              <Grid size={12}>
-                <Alert severity="info">You have no pending requests</Alert>
-              </Grid>
-            )}
-          </Grid>
+              )}
+            </Grid>
+          </Box>
         )}
 
-        {/* Available Shifts Tab (Staff) */}
-        {showAvailableShifts && (
-          <Grid container spacing={3}>
-            {availableShifts.length > 0 ? (
-              availableShifts.map((shift) => (
-                <Grid size={{ xs: 12, md: 6 }} key={shift._id}>
-                  <Card sx={{ border: "2px solid #4caf50" }}>
-                    <CardContent>
-                      <Typography variant="h6">
-                        {shift.location?.name}
-                      </Typography>
-                      <Typography>
-                        {new Date(shift.startTime).toLocaleDateString()} •{" "}
-                        {new Date(shift.startTime).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}{" "}
-                        -{" "}
-                        {new Date(shift.endTime).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </Typography>
-                      <Typography variant="body2" sx={{ mt: 1 }}>
-                        Skill: {shift.requiredSkill} • Staff Needed:{" "}
-                        {shift.requiredCount -
-                          (shift.assignedStaff?.length || 0)}
-                      </Typography>
-                      <Box mt={2}>
-                        <Button
-                          variant="contained"
-                          color="success"
-                          startIcon={<PickupIcon />}
-                          onClick={() => handlePickupShift(shift)}
-                        >
-                          Pick Up Shift
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))
-            ) : (
-              <Grid size={12}>
-                <Alert severity="info">No shifts available for pickup</Alert>
-              </Grid>
-            )}
-          </Grid>
-        )}
+        {/* ========== BEAUTIFUL MY REQUESTS TAB ========== */}
+        {showMyRequests && (
+          <Box sx={{ width: "100%" }}>
+            {/* Header Section - Full width */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h5" gutterBottom>
+                My Swap & Drop Requests
+              </Typography>
+              <Box
+                sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}
+              >
+                <Chip
+                  label={`${myRequests.length} Requests`}
+                  color={myRequests.length > 0 ? "warning" : "default"}
+                  sx={{ fontWeight: "bold" }}
+                />
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                Track the status of your shift swap and drop requests
+              </Typography>
+            </Box>
 
-        {/* Pending Approvals Tab (Manager) */}
-        {/* Pending Approvals Tab (Manager) */}
-        {showPendingApprovals && (
-          <Grid container spacing={3}>
-            {pendingRequests.length > 0 ? (
-              pendingRequests.map((req) => (
-                <Grid size={12} key={req._id}>
-                  <Card
-                    sx={{
-                      borderLeft:
-                        req.type === "drop"
-                          ? "4px solid #ff9800"
-                          : "4px solid #2196f3",
-                    }}
-                  >
-                    <CardContent>
+            {/* Cards Grid - 2 columns on desktop */}
+            <Grid container spacing={3}>
+              {myRequests.length > 0 ? (
+                myRequests.map((req) => (
+                  <Grid item xs={12} md={6} key={req._id}>
+                    <Card
+                      sx={{
+                        borderRadius: 2,
+                        boxShadow: 3,
+                        height: "100%",
+                        position: "relative",
+                        overflow: "visible",
+                        "&:hover": {
+                          boxShadow: 6,
+                          transform: "translateY(-2px)",
+                          transition: "all 0.2s",
+                        },
+                      }}
+                    >
+                      {/* Status ribbon */}
                       <Box
-                        display="flex"
-                        justifyContent="space-between"
-                        alignItems="center"
+                        sx={{
+                          position: "absolute",
+                          top: 12,
+                          right: -4,
+                          bgcolor:
+                            req.status === "pending"
+                              ? "#ff9800"
+                              : req.status === "approved"
+                                ? "#4caf50"
+                                : req.status === "rejected"
+                                  ? "#f44336"
+                                  : "#9e9e9e",
+                          color: "white",
+                          px: 2,
+                          py: 0.5,
+                          borderTopLeftRadius: 4,
+                          borderBottomLeftRadius: 4,
+                          fontWeight: "bold",
+                          fontSize: "0.75rem",
+                          textTransform: "uppercase",
+                          boxShadow: 1,
+                        }}
                       >
-                        <Box display="flex" alignItems="center" gap={1}>
-                          {req.type === "drop" ? (
-                            <DropIcon color="warning" />
-                          ) : (
-                            <SwapIcon color="primary" />
+                        {req.status}
+                      </Box>
+
+                      <CardContent>
+                        {/* Header with icon and type */}
+                        <Box display="flex" alignItems="center" gap={1} mb={2}>
+                          <Avatar
+                            sx={{
+                              bgcolor:
+                                req.type === "swap" ? "#2196f3" : "#ff9800",
+                              width: 40,
+                              height: 40,
+                            }}
+                          >
+                            {req.type === "swap" ? <SwapIcon /> : <DropIcon />}
+                          </Avatar>
+                          <Box>
+                            <Typography
+                              variant="h6"
+                              sx={{ fontWeight: "bold" }}
+                            >
+                              {req.type === "swap"
+                                ? "Shift Swap Request"
+                                : "Shift Drop Request"}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              Requested on{" "}
+                              {new Date(req.requestedAt).toLocaleDateString()}
+                            </Typography>
+                          </Box>
+                        </Box>
+
+                        <Divider sx={{ my: 2 }} />
+
+                        {/* Shift Details */}
+                        <Box
+                          sx={{
+                            bgcolor: "#f5f5f5",
+                            p: 2,
+                            borderRadius: 1,
+                            mb: 2,
+                          }}
+                        >
+                          <Typography
+                            variant="subtitle2"
+                            color="text.secondary"
+                            gutterBottom
+                          >
+                            SHIFT DETAILS
+                          </Typography>
+                          <Grid container spacing={1}>
+                            <Grid item xs={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Location
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {req.shiftInfo?.location?.name || "Unknown"}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Date
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {req.shiftInfo?.startTime
+                                  ? new Date(
+                                      req.shiftInfo.startTime,
+                                    ).toLocaleDateString()
+                                  : "Unknown"}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Time
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {req.shiftInfo?.startTime
+                                  ? new Date(
+                                      req.shiftInfo.startTime,
+                                    ).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : "??"}{" "}
+                                -
+                                {req.shiftInfo?.endTime
+                                  ? new Date(
+                                      req.shiftInfo.endTime,
+                                    ).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : "??"}
+                              </Typography>
+                            </Grid>
+                          </Grid>
+                        </Box>
+
+                        {/* Target Staff (for swaps) */}
+                        {req.type === "swap" && req.targetStaff && (
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                              mb: 2,
+                            }}
+                          >
+                            <Avatar
+                              sx={{ width: 24, height: 24, bgcolor: "#2196f3" }}
+                            >
+                              <PersonIcon fontSize="small" />
+                            </Avatar>
+                            <Typography variant="body2">
+                              <strong>Swapping with:</strong>{" "}
+                              {getStaffName(req.targetStaff)}
+                            </Typography>
+                          </Box>
+                        )}
+
+                        {/* Notes */}
+                        {req.notes && (
+                          <Box
+                            sx={{
+                              bgcolor: "#fff3e0",
+                              p: 1.5,
+                              borderRadius: 1,
+                              borderLeft: "4px solid #ff9800",
+                              mb: 2,
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 0.5,
+                              }}
+                            >
+                              <NoteIcon fontSize="small" color="warning" /> Note
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              sx={{ fontStyle: "italic" }}
+                            >
+                              "{req.notes}"
+                            </Typography>
+                          </Box>
+                        )}
+
+                        {/* If current user is the target staff and request is pending */}
+                        {req.targetStaff === user?._id &&
+                          req.status === "pending" && (
+                            <Box
+                              display="flex"
+                              gap={1}
+                              justifyContent="flex-end"
+                              mt={2}
+                            >
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                onClick={() => handleAcceptRequest(req._id)}
+                              >
+                                Accept Swap
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="error"
+                                onClick={() => handleRejectRequest(req._id)}
+                              >
+                                Decline
+                              </Button>
+                            </Box>
                           )}
-                          <Typography variant="subtitle1">
-                            {req.type === "swap"
-                              ? "Swap Request"
-                              : "Drop Request"}
+
+                        {/* Action Buttons */}
+                        {req.status === "pending" && (
+                          <Box
+                            display="flex"
+                            gap={1}
+                            justifyContent="flex-end"
+                            mt={2}
+                          >
+                            {/* If current user is the target staff (Staff B) - Show Accept/Reject */}
+                            {(req.targetStaff === user?._id ||
+                              req.targetStaff === user?.id) && (
+                              <>
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  color="success"
+                                  startIcon={<CheckIcon />}
+                                  onClick={() => handleAcceptRequest(req._id)}
+                                  sx={{ borderRadius: 2 }}
+                                >
+                                  Accept
+                                </Button>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="error"
+                                  startIcon={<RejectIcon />}
+                                  onClick={() => handleRejectRequest(req._id)}
+                                  sx={{ borderRadius: 2 }}
+                                >
+                                  Decline
+                                </Button>
+                              </>
+                            )}
+
+                            {/* If current user is the requester (Staff A) - Show Cancel */}
+                            {(req.requestingStaff === user?._id ||
+                              req.requestingStaff === user?.id) && (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="error"
+                                startIcon={<RejectIcon />}
+                                onClick={() => handleCancelRequest(req._id)}
+                                sx={{ borderRadius: 2 }}
+                              >
+                                Cancel Request
+                              </Button>
+                            )}
+                          </Box>
+                        )}
+
+                        {req.status === "pending_approval" && (
+                          <Box display="flex" justifyContent="flex-end" mt={2}>
+                            <Chip
+                              icon={<HourglassEmptyIcon />}
+                              label="Awaiting Manager Approval"
+                              color="warning"
+                              sx={{ fontWeight: "bold" }}
+                            />
+                          </Box>
+                        )}
+
+                        {req.status === "approved" && (
+                          <Box display="flex" justifyContent="flex-end" mt={2}>
+                            <Chip
+                              icon={<CheckCircleIcon />}
+                              label="Approved"
+                              color="success"
+                              sx={{ fontWeight: "bold" }}
+                            />
+                          </Box>
+                        )}
+
+                        {req.status === "rejected" && (
+                          <Box display="flex" justifyContent="flex-end" mt={2}>
+                            <Chip
+                              icon={<ErrorIcon />}
+                              label="Rejected"
+                              color="error"
+                              sx={{ fontWeight: "bold" }}
+                            />
+                          </Box>
+                        )}
+
+                        {req.status === "approved" && (
+                          <Box display="flex" justifyContent="flex-end" mt={2}>
+                            <Chip
+                              icon={<CheckCircleIcon />}
+                              label="Approved"
+                              color="success"
+                              sx={{ fontWeight: "bold" }}
+                            />
+                          </Box>
+                        )}
+
+                        {req.status === "rejected" && (
+                          <Box display="flex" justifyContent="flex-end" mt={2}>
+                            <Chip
+                              icon={<ErrorIcon />}
+                              label="Rejected"
+                              color="error"
+                              sx={{ fontWeight: "bold" }}
+                            />
+                          </Box>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))
+              ) : (
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 4, textAlign: "center", bgcolor: "#f5f5f5" }}>
+                    <DropIcon sx={{ fontSize: 60, color: "#9e9e9e", mb: 2 }} />
+                    <Typography
+                      variant="h6"
+                      color="text.secondary"
+                      gutterBottom
+                    >
+                      No Pending Requests
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      You don't have any swap or drop requests at the moment.
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      startIcon={<SwapIcon />}
+                      sx={{ mt: 2 }}
+                      onClick={() => setTabValue(2)}
+                    >
+                      Request a Swap
+                    </Button>
+                  </Paper>
+                </Grid>
+              )}
+            </Grid>
+          </Box>
+        )}
+
+        {/* Available Shifts Tab (Staff) - STYLED LIKE MY REQUESTS */}
+        {showAvailableShifts && (
+          <Box sx={{ width: "100%" }}>
+            {/* Header Section */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h5" gutterBottom>
+                Shifts Available for Pickup
+              </Typography>
+              <Box
+                sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}
+              >
+                <Chip
+                  label={`${availableShifts.length} Available`}
+                  color={availableShifts.length > 0 ? "success" : "default"}
+                  sx={{ fontWeight: "bold" }}
+                />
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                Pick up shifts that have been dropped and need coverage
+              </Typography>
+            </Box>
+
+            {/* Cards Grid - 2 columns on desktop */}
+            <Grid container spacing={3}>
+              {availableShifts.length > 0 ? (
+                availableShifts.map((shift) => (
+                  <Grid item xs={12} md={6} key={shift._id}>
+                    <Card
+                      sx={{
+                        borderRadius: 2,
+                        boxShadow: 3,
+                        height: "100%",
+                        position: "relative",
+                        overflow: "visible",
+                        border: "2px solid #4caf50",
+                        bgcolor: "#f8fff8",
+                        "&:hover": {
+                          boxShadow: 6,
+                          transform: "translateY(-2px)",
+                          transition: "all 0.2s",
+                        },
+                      }}
+                    >
+                      {/* Available ribbon */}
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          top: 12,
+                          right: -4,
+                          bgcolor: "#4caf50",
+                          color: "white",
+                          px: 2,
+                          py: 0.5,
+                          borderTopLeftRadius: 4,
+                          borderBottomLeftRadius: 4,
+                          fontWeight: "bold",
+                          fontSize: "0.75rem",
+                          textTransform: "uppercase",
+                          boxShadow: 1,
+                        }}
+                      >
+                        AVAILABLE FOR PICKUP
+                      </Box>
+
+                      <CardContent>
+                        {/* Header with icon and type */}
+                        <Box display="flex" alignItems="center" gap={1} mb={2}>
+                          <Avatar
+                            sx={{
+                              bgcolor: "#4caf50",
+                              width: 40,
+                              height: 40,
+                            }}
+                          >
+                            <PickupIcon />
+                          </Avatar>
+                          <Box>
+                            <Typography
+                              variant="h6"
+                              sx={{ fontWeight: "bold", color: "#2e7d32" }}
+                            >
+                              Shift Available
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {shift.location?.name}
+                            </Typography>
+                          </Box>
+                        </Box>
+
+                        <Divider sx={{ my: 2 }} />
+
+                        {/* Shift Details */}
+                        <Box
+                          sx={{
+                            bgcolor: "#f5f5f5",
+                            p: 2,
+                            borderRadius: 1,
+                            mb: 2,
+                          }}
+                        >
+                          <Typography
+                            variant="subtitle2"
+                            color="text.secondary"
+                            gutterBottom
+                          >
+                            SHIFT DETAILS
+                          </Typography>
+                          <Grid container spacing={1}>
+                            <Grid item xs={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Date
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {shift.startTime
+                                  ? new Date(
+                                      shift.startTime,
+                                    ).toLocaleDateString([], {
+                                      weekday: "short",
+                                      month: "short",
+                                      day: "numeric",
+                                    })
+                                  : "Unknown"}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Time
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {shift.startTime
+                                  ? new Date(
+                                      shift.startTime,
+                                    ).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : "??"}{" "}
+                                -
+                                {shift.endTime
+                                  ? new Date(shift.endTime).toLocaleTimeString(
+                                      [],
+                                      {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      },
+                                    )
+                                  : "??"}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Skill Required
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {shift.requiredSkill || "Unknown"}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Staff Needed
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {shift.requiredCount -
+                                  (shift.assignedStaff?.length || 0)}{" "}
+                                of {shift.requiredCount}
+                              </Typography>
+                            </Grid>
+                          </Grid>
+                        </Box>
+
+                        {/* Quick Stats */}
+                        <Box
+                          sx={{
+                            display: "flex",
+                            gap: 2,
+                            mb: 2,
+                            justifyContent: "space-around",
+                          }}
+                        >
+                          <Box textAlign="center">
+                            <Typography
+                              variant="h6"
+                              color="primary"
+                              sx={{ fontWeight: "bold" }}
+                            >
+                              {shift.requiredSkill}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              Skill
+                            </Typography>
+                          </Box>
+                          <Box textAlign="center">
+                            <Typography
+                              variant="h6"
+                              color="success.main"
+                              sx={{ fontWeight: "bold" }}
+                            >
+                              {shift.location?.name?.split(" ")[0] || "N/A"}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              Location
+                            </Typography>
+                          </Box>
+                        </Box>
+
+                        {/* In the Available Shifts card, replace the button section */}
+                        <Box display="flex" flexDirection="column" gap={1}>
+                          <Button
+                            variant="contained"
+                            color="success"
+                            startIcon={<PickupIcon />}
+                            onClick={() => handlePickupClick(shift)}
+                            fullWidth
+                            disabled={checkingPickupOvertime}
+                          >
+                            {checkingPickupOvertime
+                              ? "Picking up..."
+                              : "Pick Up Shift"}
+                          </Button>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))
+              ) : (
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 4, textAlign: "center", bgcolor: "#f5f5f5" }}>
+                    <PickupIcon
+                      sx={{ fontSize: 60, color: "#9e9e9e", mb: 2 }}
+                    />
+                    <Typography
+                      variant="h6"
+                      color="text.secondary"
+                      gutterBottom
+                    >
+                      No Shifts Available
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      There are no shifts available for pickup right now.
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mt: 1 }}
+                    >
+                      Check back later or request to swap your own shifts.
+                    </Typography>
+                  </Paper>
+                </Grid>
+              )}
+            </Grid>
+          </Box>
+        )}
+
+        {/* Pending Approvals Tab (Manager) - ENHANCED VERSION */}
+        {showPendingApprovals && (
+          <Box sx={{ width: "100%" }}>
+            {/* Header Section */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h5" gutterBottom>
+                Pending Approvals
+                {pendingRequests.length > 0 && (
+                  <Chip
+                    label={`${pendingRequests.length} pending`}
+                    color="warning"
+                    size="small"
+                    sx={{ ml: 2, fontWeight: "bold" }}
+                  />
+                )}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Review and approve/reject swap and drop requests from staff
+              </Typography>
+            </Box>
+
+            {/* Requests Grid */}
+            {pendingRequests.length > 0 ? (
+              <Grid container spacing={3}>
+                {pendingRequests.map((req) => (
+                  <Grid item xs={12} key={req._id}>
+                    <Card
+                      sx={{
+                        borderLeft:
+                          req.type === "drop"
+                            ? "4px solid #ff9800"
+                            : "4px solid #2196f3",
+                        borderRadius: 2,
+                        boxShadow: 2,
+                        "&:hover": {
+                          boxShadow: 4,
+                        },
+                      }}
+                    >
+                      <CardContent>
+                        {/* Header with type and requester */}
+                        <Box
+                          display="flex"
+                          justifyContent="space-between"
+                          alignItems="center"
+                          mb={2}
+                        >
+                          <Box display="flex" alignItems="center" gap={1}>
+                            {req.type === "drop" ? (
+                              <DropIcon sx={{ color: "#ff9800" }} />
+                            ) : (
+                              <SwapIcon sx={{ color: "#2196f3" }} />
+                            )}
+                            <Typography variant="h6">
+                              {req.type === "swap"
+                                ? "Swap Request"
+                                : "Drop Request"}
+                            </Typography>
+                          </Box>
+                          <Chip
+                            label={req.type === "drop" ? "DROP" : "SWAP"}
+                            size="small"
+                            color={req.type === "drop" ? "warning" : "info"}
+                            sx={{ fontWeight: "bold" }}
+                          />
+                        </Box>
+
+                        {/* Requester info */}
+                        <Box
+                          sx={{
+                            bgcolor: "#f5f5f5",
+                            p: 1.5,
+                            borderRadius: 1,
+                            mb: 2,
+                          }}
+                        >
+                          <Typography variant="body2">
+                            <strong>Requested by:</strong>{" "}
+                            {getStaffName(req.requestingStaff)}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {new Date(req.requestedAt).toLocaleString()}
                           </Typography>
                         </Box>
-                        <Chip
-                          label={req.type === "drop" ? "DROP" : "SWAP"}
-                          size="small"
-                          color={req.type === "drop" ? "warning" : "info"}
-                        />
-                      </Box>
-                      <Typography variant="body2" sx={{ mt: 1 }}>
-                        <strong>From:</strong>{" "}
-                        {getStaffName(req.requestingStaff)}
-                      </Typography>
-                      {req.type === "drop" && (
-                        <Typography variant="body2" color="warning.main">
-                          <strong>⚠️ Staff wants to drop this shift</strong>
-                        </Typography>
-                      )}
-                      <Typography variant="body2">
-                        <strong>Shift:</strong> {req.shiftInfo?.location?.name}{" "}
-                        • {new Date(req.shiftInfo?.startTime).toLocaleString()}
-                      </Typography>
-                      {req.notes && (
-                        <Typography
-                          variant="body2"
-                          sx={{ mt: 1, fontStyle: "italic" }}
+
+                        {/* Shift Details */}
+                        <Box sx={{ mb: 2 }}>
+                          <Typography
+                            variant="subtitle2"
+                            color="text.secondary"
+                            gutterBottom
+                          >
+                            SHIFT DETAILS
+                          </Typography>
+                          <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Location
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {req.shiftInfo?.location?.name || "Unknown"}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Date
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {req.shiftInfo?.startTime
+                                  ? new Date(
+                                      req.shiftInfo.startTime,
+                                    ).toLocaleDateString()
+                                  : "Unknown"}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Time
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {req.shiftInfo?.startTime
+                                  ? new Date(
+                                      req.shiftInfo.startTime,
+                                    ).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : "??"}{" "}
+                                -{" "}
+                                {req.shiftInfo?.endTime
+                                  ? new Date(
+                                      req.shiftInfo.endTime,
+                                    ).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : "??"}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Skill Required
+                              </Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                {req.shiftInfo?.requiredSkill || "Unknown"}
+                              </Typography>
+                            </Grid>
+                          </Grid>
+                        </Box>
+
+                        {/* Target Staff (for swaps) */}
+                        {req.type === "swap" && req.targetStaff && (
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                              mb: 2,
+                              p: 1.5,
+                              bgcolor: "#e3f2fd",
+                              borderRadius: 1,
+                            }}
+                          >
+                            <PersonIcon sx={{ color: "#1976d2" }} />
+                            <Typography variant="body2">
+                              <strong>Target Staff:</strong>{" "}
+                              {getStaffName(req.targetStaff)}
+                            </Typography>
+                          </Box>
+                        )}
+
+                        {/* Notes */}
+                        {req.notes && (
+                          <Box
+                            sx={{
+                              bgcolor: "#fff3e0",
+                              p: 1.5,
+                              borderRadius: 1,
+                              borderLeft: "4px solid #ff9800",
+                              mb: 2,
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 0.5,
+                              }}
+                            >
+                              <NoteIcon fontSize="small" color="warning" />{" "}
+                              Notes
+                            </Typography>
+                            <Typography variant="body2">
+                              "{req.notes}"
+                            </Typography>
+                          </Box>
+                        )}
+
+                        {/* Action Buttons */}
+                        <Box
+                          display="flex"
+                          gap={1}
+                          justifyContent="flex-end"
+                          mt={2}
                         >
-                          "{req.notes}"
-                        </Typography>
-                      )}
-                      <Box mt={2} display="flex" gap={1}>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          color="success"
-                          startIcon={<ApproveIcon />}
-                          onClick={() =>
-                            handleApproveRequest(req, req.shiftInfo)
-                          }
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          color="error"
-                          startIcon={<RejectIcon />}
-                          onClick={() =>
-                            handleRejectRequest(req, req.shiftInfo)
-                          }
-                        >
-                          Reject
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))
-            ) : (
-              <Grid size={12}>
-                <Alert severity="info">No pending approvals</Alert>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            startIcon={<RejectIcon />}
+                            onClick={() =>
+                              handleRejectRequest(req, req.shiftInfo)
+                            }
+                            sx={{ borderRadius: 2 }}
+                          >
+                            Reject
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="success"
+                            startIcon={<ApproveIcon />}
+                            onClick={() =>
+                              handleApproveRequest(req, req.shiftInfo)
+                            }
+                            sx={{ borderRadius: 2 }}
+                          >
+                            Approve
+                          </Button>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))}
               </Grid>
+            ) : (
+              <Paper sx={{ p: 4, textAlign: "center", bgcolor: "#f5f5f5" }}>
+                <CheckCircleIcon
+                  sx={{ fontSize: 60, color: "#4caf50", mb: 2 }}
+                />
+                <Typography variant="h6" gutterBottom>
+                  All Caught Up!
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  No pending approvals at the moment. Check back later.
+                </Typography>
+              </Paper>
             )}
-          </Grid>
+          </Box>
         )}
 
         {/* Swap Request Dialog */}
