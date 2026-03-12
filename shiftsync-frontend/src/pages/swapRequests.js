@@ -29,7 +29,6 @@ import {
   SwapHoriz as SwapIcon,
   Check as ApproveIcon,
   Close as RejectIcon,
-  Warning as WarningIcon,
   EventBusy as DropIcon,
   EventAvailable as PickupIcon,
   Refresh as RefreshIcon,
@@ -44,7 +43,6 @@ import Layout from "../components/layout/Layout";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import { useOvertime } from "../context/OvertimeContext";
-import OvertimeWarning from "../components/overtime/OvertimeWarning";
 
 const SwapRequests = () => {
   console.log("🔥🔥🔥 SWAP REQUESTS PAGE LOADED 🔥🔥🔥");
@@ -68,11 +66,6 @@ const SwapRequests = () => {
     message: "",
     severity: "success",
   });
-  const { checkAssignment, overrideConsecutiveDays } = useOvertime();
-  // const [pickupOvertimeCheck, setPickupOvertimeCheck] = useState(null);
-  const [checkingPickupOvertime, setCheckingPickupOvertime] = useState(false);
-  // const [selectedPickupShift, setSelectedPickupShift] = useState(null);
-
   const { user, token, loading: authLoading } = useAuth();
   const isManager = user?.role === "admin" || user?.role === "manager";
   const isStaff = user?.role === "staff";
@@ -136,7 +129,7 @@ const SwapRequests = () => {
         hasToken: !!token,
       });
     }
-  }, [authLoading, user, token]);
+  }, [authLoading, user, token, fetchAllData]);
 
   const fetchAllData = async () => {
     console.log("🟢🟢🟢🟢🟢 FETCH ALL DATA STARTED 🟢🟢🟢🟢🟢");
@@ -477,54 +470,6 @@ const SwapRequests = () => {
     }
   };
 
-  // New function to actually perform pickup after checks
-  // const confirmPickup = async (shift) => {
-  //   const confirm = window.confirm(
-  //     `Are you sure you want to pick up this shift?\n\n` +
-  //       `Location: ${shift.location?.name}\n` +
-  //       `Date: ${new Date(shift.startTime).toLocaleDateString()}\n` +
-  //       `Time: ${new Date(shift.startTime).toLocaleTimeString()} - ${new Date(shift.endTime).toLocaleTimeString()}`,
-  //   );
-
-  //   if (!confirm) return;
-
-  //   try {
-  //     const token = localStorage.getItem("token");
-  //     const staffId = user?.id || user?._id;
-
-  //     const res = await axios.put(
-  //       `${process.env.REACT_APP_API_URL}/shifts/${shift._id}/assign`,
-  //       {
-  //         staffId: staffId,
-  //         reason: "Picked up from available shifts",
-  //       },
-  //       { headers: { Authorization: `Bearer ${token}` } },
-  //     );
-
-  //     showMessage("success", "Shift picked up successfully!");
-  //     // setPickupOvertimeCheck(null);
-  //     // setSelectedPickupShift(null);
-  //     fetchAllData();
-  //   } catch (error) {
-  //     const message =
-  //       error.response?.data?.message || "Failed to pick up shift";
-  //     showMessage("error", message);
-  //   }
-  // };
-
-  // // Handle override for pickup
-  // const handlePickupOverride = async (reason) => {
-  //   if (selectedPickupShift) {
-  //     await overrideConsecutiveDays(
-  //       user?._id || user?.id,
-  //       selectedPickupShift._id,
-  //       reason,
-  //     );
-  //     // Recheck after override
-  // handlePickupClick(selectedPickupShift);
-  //   }
-  // };
-
   const handleAcceptRequest = async (requestId) => {
     try {
       console.log("✅ Accepting request:", requestId);
@@ -572,61 +517,10 @@ const SwapRequests = () => {
     }
   };
 
-  const handlePickupShift = async (shift) => {
-    try {
-      console.log("📤 Picking up shift:", shift._id);
-      const token = localStorage.getItem("token");
-      const staffId = user?.id || user?._id;
-
-      console.log("📤 Staff ID:", staffId);
-      console.log(
-        "📤 API URL:",
-        `${process.env.REACT_APP_API_URL}/shifts/${shift._id}/assign`,
-      );
-
-      const res = await axios.put(
-        `${process.env.REACT_APP_API_URL}/shifts/${shift._id}/assign`,
-        {
-          staffId: staffId,
-          reason: "Picked up from available shifts",
-        },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-
-      console.log("✅ Pickup successful:", res.data);
-      showMessage("success", "Shift picked up successfully!");
-      fetchAllData();
-    } catch (error) {
-      console.error("❌ Error picking up shift:", error);
-      console.error("❌ Error response:", error.response?.data);
-      console.error("❌ Error status:", error.response?.status);
-      const message =
-        error.response?.data?.message || "Failed to pick up shift";
-      showMessage("error", message);
-    }
-  };
-
   const getStaffName = (staffId) => {
     if (!staffId) return "Unknown";
     const s = staff.find((s) => s._id === staffId);
     return s?.name || "Unknown";
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "pending":
-        return "warning";
-      case "approved":
-        return "success";
-      case "rejected":
-        return "error";
-      case "cancelled":
-        return "default";
-      case "expired":
-        return "default";
-      default:
-        return "default";
-    }
   };
 
   if (loading || authLoading) {
