@@ -11,9 +11,8 @@ const { errorHandler } = require('./middleware/errorHandler');
 // Connect to database
 connectDB();
 
-import cors from "cors";
 app.use(cors({
-  origin: "*", // or specify your frontend URL
+  origin: process.env.FRONTEND_URL, // https://priority-soft-full-stack-developer.onrender.com
   credentials: true
 }));
 

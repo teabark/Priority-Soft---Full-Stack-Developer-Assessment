@@ -84,6 +84,7 @@ const login = async (email, password) => {
         email,
         password,
       },
+      { withCredentials: true }
     );
 
     console.log("✅ Login successful");
