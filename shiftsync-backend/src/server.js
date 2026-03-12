@@ -1,7 +1,6 @@
 require('dotenv').config();
 const http = require('http');
 const mongoose = require('mongoose');
-const axios = require("axios");
 
 const app = require('./config/app');
 const NotificationHelper = require('./services/notification.helper');
@@ -199,6 +198,13 @@ app.get("/hello", (res, req) => {
   res.send('Hello World');
 })
 
+app.get("/", (req, res) => {
+  res.json({
+    message: "ShiftSync API is running",
+    health: "/health"
+  });
+});
+
 // TEMPORARY - Simple shifts endpoint for managers
 app.get('/api/manager-shifts', async (req,res) => {
   try {
@@ -265,19 +271,11 @@ app.use(errorHandler);
 
 // Start server
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, async () => {
+server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📡 WebSocket server initialized`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
-
-  // Automatic health check after startup
-  try {
-    const res = await axios.get(`http://localhost:${PORT}/health`);
-    console.log("Health check:", res.data);
-  } catch (err) {
-    console.error("Health check failed:", err.message);
-  }
 });
 
 // Graceful shutdown
