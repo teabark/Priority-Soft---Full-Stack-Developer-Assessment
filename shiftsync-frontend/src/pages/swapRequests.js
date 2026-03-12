@@ -129,7 +129,7 @@ const SwapRequests = () => {
         hasToken: !!token,
       });
     }
-  }, [authLoading, user, token, fetchAllData]);
+  }, [authLoading, user, token]);
 
   const fetchAllData = async () => {
     console.log("🟢🟢🟢🟢🟢 FETCH ALL DATA STARTED 🟢🟢🟢🟢🟢");
@@ -286,6 +286,58 @@ const SwapRequests = () => {
     setSnackbar({ open: true, severity, message });
   };
 
+  // Staff B accepts a swap request
+const handleAcceptSwap = async (requestId) => {
+  console.log('✅ Staff B accepting swap:', requestId);
+  try {
+    await axios.put(
+      `${process.env.REACT_APP_API_URL}/swaps/${requestId}/accept`,
+      {},
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    showMessage("success", "Swap accepted! Waiting for manager approval.");
+    fetchAllData();
+  } catch (error) {
+    console.error('❌ Error accepting swap:', error);
+    showMessage("error", error.response?.data?.message || "Failed to accept swap");
+  }
+};
+
+// Staff B rejects a swap request
+const handleRejectSwap = async (requestId) => {
+  console.log('❌ Staff B rejecting swap:', requestId);
+  try {
+    await axios.put(
+      `${process.env.REACT_APP_API_URL}/swaps/${requestId}/reject`,
+      {},
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    showMessage("success", "Swap request rejected");
+    fetchAllData();
+  } catch (error) {
+    console.error('❌ Error rejecting swap:', error);
+    showMessage("error", error.response?.data?.message || "Failed to reject swap");
+  }
+};
+
+// Staff A withdraws their request
+const handleWithdrawRequest = async (requestId) => {
+  if (!window.confirm("Are you sure you want to withdraw this request?")) return;
+  
+  console.log('🗑️ Withdrawing request:', requestId);
+  try {
+    await axios.delete(
+      `${process.env.REACT_APP_API_URL}/swaps/${requestId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    showMessage("success", "Request withdrawn successfully");
+    fetchAllData();
+  } catch (error) {
+    console.error('❌ Error withdrawing request:', error);
+    showMessage("error", error.response?.data?.message || "Failed to withdraw request");
+  }
+};
+
   const handleRequestSwap = (shift) => {
     console.log("🔘 Request Swap clicked for shift:", shift?._id);
     setSelectedShift(shift);
@@ -379,28 +431,23 @@ const SwapRequests = () => {
     }
   };
 
-  const handleApproveRequest = async (request, shift) => {
+  // Manager approve (works for both pending and pending_approval)
+  const handleApproveRequest = async (requestId) => {
+    console.log("✅ Approving request:", requestId);
     try {
-      console.log("🔘 Approving request:", request._id);
-      const token = localStorage.getItem("token");
-
-      const res = await axios.put(
-        `${process.env.REACT_APP_API_URL}/swaps/${request._id}`,
-        { status: "approved" },
+      await axios.put(
+        `${process.env.REACT_APP_API_URL}/swaps/${requestId}/approve`,
+        {},
         { headers: { Authorization: `Bearer ${token}` } },
       );
-
-      console.log("✅ Approve response:", res.data);
-      showMessage("success", "Request approved successfully!");
-
-      // Refresh all data to remove approved request from list
+      showMessage("success", "Request approved successfully");
       fetchAllData();
     } catch (error) {
-      console.error("❌ Error approving request:", error);
-      console.error("Error response:", error.response?.data);
-      const message =
-        error.response?.data?.message || "Failed to approve request";
-      showMessage("error", message);
+      console.error("❌ Error:", error);
+      showMessage(
+        "error",
+        error.response?.data?.message || "Failed to approve",
+      );
     }
   };
 
@@ -495,25 +542,21 @@ const SwapRequests = () => {
     }
   };
 
-  const handleRejectRequest = async (requestId) => {
-    try {
-      console.log("❌ Rejecting request:", requestId);
-      const token = localStorage.getItem("token");
 
-      const res = await axios.put(
-        `${process.env.REACT_APP_API_URL}/swaps/${requestId}`,
-        { status: "rejected" },
+  // Manager reject (works for both pending and pending_approval)
+  const handleRejectRequest = async (requestId) => {
+    console.log("❌ Rejecting request:", requestId);
+    try {
+      await axios.put(
+        `${process.env.REACT_APP_API_URL}/swaps/${requestId}/reject`,
+        {},
         { headers: { Authorization: `Bearer ${token}` } },
       );
-
-      console.log("✅ Reject response:", res.data);
-      showMessage("success", "Swap request rejected");
+      showMessage("success", "Request rejected");
       fetchAllData();
     } catch (error) {
-      console.error("❌ Error rejecting request:", error);
-      const message =
-        error.response?.data?.message || "Failed to reject request";
-      showMessage("error", message);
+      console.error("❌ Error:", error);
+      showMessage("error", error.response?.data?.message || "Failed to reject");
     }
   };
 
@@ -881,30 +924,25 @@ const SwapRequests = () => {
                       sx={{
                         borderRadius: 2,
                         boxShadow: 3,
-                        height: "100%",
                         position: "relative",
-                        overflow: "visible",
-                        "&:hover": {
-                          boxShadow: 6,
-                          transform: "translateY(-2px)",
-                          transition: "all 0.2s",
-                        },
                       }}
                     >
-                      {/* Status ribbon */}
+                      {/* Status Ribbon - SINGLE status indicator */}
                       <Box
                         sx={{
                           position: "absolute",
                           top: 12,
                           right: -4,
                           bgcolor:
-                            req.status === "pending"
-                              ? "#ff9800"
-                              : req.status === "approved"
-                                ? "#4caf50"
-                                : req.status === "rejected"
-                                  ? "#f44336"
-                                  : "#9e9e9e",
+                            req.status === "approved"
+                              ? "#4caf50"
+                              : req.status === "rejected"
+                                ? "#f44336"
+                                : req.status === "pending"
+                                  ? "#ff9800"
+                                  : req.status === "pending_approval"
+                                    ? "#2196f3"
+                                    : "#9e9e9e",
                           color: "white",
                           px: 2,
                           py: 0.5,
@@ -916,7 +954,15 @@ const SwapRequests = () => {
                           boxShadow: 1,
                         }}
                       >
-                        {req.status}
+                        {req.status === "approved"
+                          ? "APPROVED"
+                          : req.status === "rejected"
+                            ? "REJECTED"
+                            : req.status === "pending"
+                              ? "WAITING FOR MANAGER"
+                              : req.status === "pending_approval"
+                                ? "READY FOR APPROVAL"
+                                : req.status}
                       </Box>
 
                       <CardContent>
@@ -926,27 +972,21 @@ const SwapRequests = () => {
                             sx={{
                               bgcolor:
                                 req.type === "swap" ? "#2196f3" : "#ff9800",
-                              width: 40,
-                              height: 40,
                             }}
                           >
                             {req.type === "swap" ? <SwapIcon /> : <DropIcon />}
                           </Avatar>
                           <Box>
-                            <Typography
-                              variant="h6"
-                              sx={{ fontWeight: "bold" }}
-                            >
+                            <Typography variant="h6">
                               {req.type === "swap"
-                                ? "Shift Swap Request"
-                                : "Shift Drop Request"}
+                                ? "Swap Request"
+                                : "Drop Request"}
                             </Typography>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              Requested on{" "}
-                              {new Date(req.requestedAt).toLocaleDateString()}
+                            <Typography variant="caption">
+                              {req.userRole === "requester"
+                                ? "You requested"
+                                : "Requested for you"}{" "}
+                              •{new Date(req.requestedAt).toLocaleDateString()}
                             </Typography>
                           </Box>
                         </Box>
@@ -989,11 +1029,9 @@ const SwapRequests = () => {
                                 Date
                               </Typography>
                               <Typography variant="body1" fontWeight="medium">
-                                {req.shiftInfo?.startTime
-                                  ? new Date(
-                                      req.shiftInfo.startTime,
-                                    ).toLocaleDateString()
-                                  : "Unknown"}
+                                {new Date(
+                                  req.shiftInfo?.startTime,
+                                ).toLocaleDateString()}
                               </Typography>
                             </Grid>
                             <Grid item xs={6}>
@@ -1004,23 +1042,13 @@ const SwapRequests = () => {
                                 Time
                               </Typography>
                               <Typography variant="body1" fontWeight="medium">
-                                {req.shiftInfo?.startTime
-                                  ? new Date(
-                                      req.shiftInfo.startTime,
-                                    ).toLocaleTimeString([], {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })
-                                  : "??"}{" "}
+                                {new Date(
+                                  req.shiftInfo?.startTime,
+                                ).toLocaleTimeString()}{" "}
                                 -
-                                {req.shiftInfo?.endTime
-                                  ? new Date(
-                                      req.shiftInfo.endTime,
-                                    ).toLocaleTimeString([], {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })
-                                  : "??"}
+                                {new Date(
+                                  req.shiftInfo?.endTime,
+                                ).toLocaleTimeString()}
                               </Typography>
                             </Grid>
                           </Grid>
@@ -1036,13 +1064,9 @@ const SwapRequests = () => {
                               mb: 2,
                             }}
                           >
-                            <Avatar
-                              sx={{ width: 24, height: 24, bgcolor: "#2196f3" }}
-                            >
-                              <PersonIcon fontSize="small" />
-                            </Avatar>
+                            <PersonIcon fontSize="small" color="action" />
                             <Typography variant="body2">
-                              <strong>Swapping with:</strong>{" "}
+                              <strong>Target Staff:</strong>{" "}
                               {getStaffName(req.targetStaff)}
                             </Typography>
                           </Box>
@@ -1055,13 +1079,11 @@ const SwapRequests = () => {
                               bgcolor: "#fff3e0",
                               p: 1.5,
                               borderRadius: 1,
-                              borderLeft: "4px solid #ff9800",
                               mb: 2,
                             }}
                           >
                             <Typography
                               variant="caption"
-                              color="text.secondary"
                               sx={{
                                 display: "flex",
                                 alignItems: "center",
@@ -1070,44 +1092,13 @@ const SwapRequests = () => {
                             >
                               <NoteIcon fontSize="small" color="warning" /> Note
                             </Typography>
-                            <Typography
-                              variant="body2"
-                              sx={{ fontStyle: "italic" }}
-                            >
+                            <Typography variant="body2" fontStyle="italic">
                               "{req.notes}"
                             </Typography>
                           </Box>
                         )}
 
-                        {/* If current user is the target staff and request is pending */}
-                        {req.targetStaff === user?._id &&
-                          req.status === "pending" && (
-                            <Box
-                              display="flex"
-                              gap={1}
-                              justifyContent="flex-end"
-                              mt={2}
-                            >
-                              <Button
-                                size="small"
-                                variant="contained"
-                                color="success"
-                                onClick={() => handleAcceptRequest(req._id)}
-                              >
-                                Accept Swap
-                              </Button>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                color="error"
-                                onClick={() => handleRejectRequest(req._id)}
-                              >
-                                Decline
-                              </Button>
-                            </Box>
-                          )}
-
-                        {/* Action Buttons */}
+                        {/* Action Buttons - Only show for pending requests */}
                         {req.status === "pending" && (
                           <Box
                             display="flex"
@@ -1115,102 +1106,42 @@ const SwapRequests = () => {
                             justifyContent="flex-end"
                             mt={2}
                           >
-                            {/* If current user is the target staff (Staff B) - Show Accept/Reject */}
-                            {(req.targetStaff === user?._id ||
-                              req.targetStaff === user?.id) && (
-                              <>
-                                <Button
-                                  size="small"
-                                  variant="contained"
-                                  color="success"
-                                  startIcon={<CheckIcon />}
-                                  onClick={() => handleAcceptRequest(req._id)}
-                                  sx={{ borderRadius: 2 }}
-                                >
-                                  Accept
-                                </Button>
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  color="error"
-                                  startIcon={<RejectIcon />}
-                                  onClick={() => handleRejectRequest(req._id)}
-                                  sx={{ borderRadius: 2 }}
-                                >
-                                  Decline
-                                </Button>
-                              </>
-                            )}
-
-                            {/* If current user is the requester (Staff A) - Show Cancel */}
-                            {(req.requestingStaff === user?._id ||
-                              req.requestingStaff === user?.id) && (
+                            {/* If current user is the requester (Staff A) - Show Withdraw */}
+                            {req.userRole === "requester" && (
                               <Button
                                 size="small"
                                 variant="outlined"
                                 color="error"
                                 startIcon={<RejectIcon />}
-                                onClick={() => handleCancelRequest(req._id)}
-                                sx={{ borderRadius: 2 }}
+                                onClick={() => handleWithdrawRequest(req._id)}
                               >
-                                Cancel Request
+                                Withdraw Request
                               </Button>
                             )}
-                          </Box>
-                        )}
 
-                        {req.status === "pending_approval" && (
-                          <Box display="flex" justifyContent="flex-end" mt={2}>
-                            <Chip
-                              icon={<HourglassEmptyIcon />}
-                              label="Awaiting Manager Approval"
-                              color="warning"
-                              sx={{ fontWeight: "bold" }}
-                            />
-                          </Box>
-                        )}
-
-                        {req.status === "approved" && (
-                          <Box display="flex" justifyContent="flex-end" mt={2}>
-                            <Chip
-                              icon={<CheckCircleIcon />}
-                              label="Approved"
-                              color="success"
-                              sx={{ fontWeight: "bold" }}
-                            />
-                          </Box>
-                        )}
-
-                        {req.status === "rejected" && (
-                          <Box display="flex" justifyContent="flex-end" mt={2}>
-                            <Chip
-                              icon={<ErrorIcon />}
-                              label="Rejected"
-                              color="error"
-                              sx={{ fontWeight: "bold" }}
-                            />
-                          </Box>
-                        )}
-
-                        {req.status === "approved" && (
-                          <Box display="flex" justifyContent="flex-end" mt={2}>
-                            <Chip
-                              icon={<CheckCircleIcon />}
-                              label="Approved"
-                              color="success"
-                              sx={{ fontWeight: "bold" }}
-                            />
-                          </Box>
-                        )}
-
-                        {req.status === "rejected" && (
-                          <Box display="flex" justifyContent="flex-end" mt={2}>
-                            <Chip
-                              icon={<ErrorIcon />}
-                              label="Rejected"
-                              color="error"
-                              sx={{ fontWeight: "bold" }}
-                            />
+                            {/* If current user is the target (Staff B) - Show Accept/Decline */}
+                            {req.userRole === "target" && (
+                              <>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="error"
+                                  startIcon={<RejectIcon />}
+                                  onClick={() => handleRejectSwap(req._id)}
+                                >
+                                  Decline
+                                </Button>
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  color="success"
+                                  startIcon={<CheckIcon />}
+                                  onClick={() => handleAcceptSwap(req._id)}
+                                >
+                                  Accept
+                                </Button>
+                              </>
+                            )}
                           </Box>
                         )}
                       </CardContent>
@@ -1219,26 +1150,8 @@ const SwapRequests = () => {
                 ))
               ) : (
                 <Grid item xs={12}>
-                  <Paper sx={{ p: 4, textAlign: "center", bgcolor: "#f5f5f5" }}>
-                    <DropIcon sx={{ fontSize: 60, color: "#9e9e9e", mb: 2 }} />
-                    <Typography
-                      variant="h6"
-                      color="text.secondary"
-                      gutterBottom
-                    >
-                      No Pending Requests
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      You don't have any swap or drop requests at the moment.
-                    </Typography>
-                    <Button
-                      variant="contained"
-                      startIcon={<SwapIcon />}
-                      sx={{ mt: 2 }}
-                      onClick={() => setTabValue(2)}
-                    >
-                      Request a Swap
-                    </Button>
+                  <Paper sx={{ p: 4, textAlign: "center" }}>
+                    <Typography>No requests found</Typography>
                   </Paper>
                 </Grid>
               )}
@@ -1521,188 +1434,78 @@ const SwapRequests = () => {
           </Box>
         )}
 
-        {/* Pending Approvals Tab (Manager) - ENHANCED VERSION */}
+        {/* Pending Approvals Tab */}
         {showPendingApprovals && (
-          <Box sx={{ width: "100%" }}>
-            {/* Header Section */}
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="h5" gutterBottom>
-                Pending Approvals
-                {pendingRequests.length > 0 && (
-                  <Chip
-                    label={`${pendingRequests.length} pending`}
-                    color="warning"
-                    size="small"
-                    sx={{ ml: 2, fontWeight: "bold" }}
-                  />
-                )}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Review and approve/reject swap and drop requests from staff
-              </Typography>
-            </Box>
+          <Box>
+            <Typography variant="h5" gutterBottom>
+              Pending Approvals
+              <Chip
+                label={`${pendingRequests.length} pending`}
+                color="warning"
+                sx={{ ml: 2 }}
+              />
+            </Typography>
 
-            {/* Requests Grid */}
-            {pendingRequests.length > 0 ? (
-              <Grid container spacing={3}>
-                {pendingRequests.map((req) => (
+            <Grid container spacing={3}>
+              {pendingRequests.length > 0 ? (
+                pendingRequests.map((req) => (
                   <Grid item xs={12} key={req._id}>
-                    <Card
-                      sx={{
-                        borderLeft:
-                          req.type === "drop"
-                            ? "4px solid #ff9800"
-                            : "4px solid #2196f3",
-                        borderRadius: 2,
-                        boxShadow: 2,
-                        "&:hover": {
-                          boxShadow: 4,
-                        },
-                      }}
-                    >
+                    <Card sx={{ borderRadius: 2, boxShadow: 3 }}>
                       <CardContent>
-                        {/* Header with type and requester */}
+                        {/* Request header */}
                         <Box
                           display="flex"
                           justifyContent="space-between"
                           alignItems="center"
-                          mb={2}
                         >
-                          <Box display="flex" alignItems="center" gap={1}>
-                            {req.type === "drop" ? (
-                              <DropIcon sx={{ color: "#ff9800" }} />
-                            ) : (
-                              <SwapIcon sx={{ color: "#2196f3" }} />
-                            )}
-                            <Typography variant="h6">
-                              {req.type === "swap"
-                                ? "Swap Request"
-                                : "Drop Request"}
-                            </Typography>
-                          </Box>
+                          <Typography variant="h6">
+                            {req.type === "swap"
+                              ? "Swap Request"
+                              : "Drop Request"}
+                          </Typography>
                           <Chip
-                            label={req.type === "drop" ? "DROP" : "SWAP"}
-                            size="small"
-                            color={req.type === "drop" ? "warning" : "info"}
-                            sx={{ fontWeight: "bold" }}
+                            label={req.status}
+                            color={
+                              req.status === "pending" ? "warning" : "info"
+                            }
                           />
                         </Box>
 
-                        {/* Requester info */}
-                        <Box
-                          sx={{
-                            bgcolor: "#f5f5f5",
-                            p: 1.5,
-                            borderRadius: 1,
-                            mb: 2,
-                          }}
-                        >
-                          <Typography variant="body2">
-                            <strong>Requested by:</strong>{" "}
-                            {getStaffName(req.requestingStaff)}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {new Date(req.requestedAt).toLocaleString()}
-                          </Typography>
-                        </Box>
-
-                        {/* Shift Details */}
-                        <Box sx={{ mb: 2 }}>
-                          <Typography
-                            variant="subtitle2"
-                            color="text.secondary"
-                            gutterBottom
-                          >
-                            SHIFT DETAILS
-                          </Typography>
-                          <Grid container spacing={2}>
-                            <Grid item xs={12} sm={6}>
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                              >
-                                Location
-                              </Typography>
-                              <Typography variant="body1" fontWeight="medium">
-                                {req.shiftInfo?.location?.name || "Unknown"}
-                              </Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                              >
-                                Date
-                              </Typography>
-                              <Typography variant="body1" fontWeight="medium">
-                                {req.shiftInfo?.startTime
-                                  ? new Date(
-                                      req.shiftInfo.startTime,
-                                    ).toLocaleDateString()
-                                  : "Unknown"}
-                              </Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                              >
-                                Time
-                              </Typography>
-                              <Typography variant="body1" fontWeight="medium">
-                                {req.shiftInfo?.startTime
-                                  ? new Date(
-                                      req.shiftInfo.startTime,
-                                    ).toLocaleTimeString([], {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })
-                                  : "??"}{" "}
-                                -{" "}
-                                {req.shiftInfo?.endTime
-                                  ? new Date(
-                                      req.shiftInfo.endTime,
-                                    ).toLocaleTimeString([], {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })
-                                  : "??"}
-                              </Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                              >
-                                Skill Required
-                              </Typography>
-                              <Typography variant="body1" fontWeight="medium">
-                                {req.shiftInfo?.requiredSkill || "Unknown"}
-                              </Typography>
-                            </Grid>
-                          </Grid>
-                        </Box>
-
-                        {/* Target Staff (for swaps) */}
-                        {req.type === "swap" && req.targetStaff && (
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 1,
-                              mb: 2,
-                              p: 1.5,
-                              bgcolor: "#e3f2fd",
-                              borderRadius: 1,
-                            }}
-                          >
-                            <PersonIcon sx={{ color: "#1976d2" }} />
-                            <Typography variant="body2">
-                              <strong>Target Staff:</strong>{" "}
-                              {getStaffName(req.targetStaff)}
+                        {/* Request details */}
+                        <Grid container spacing={2} sx={{ mt: 1 }}>
+                          <Grid item xs={12} sm={6}>
+                            <Typography>
+                              <strong>Requester:</strong>{" "}
+                              {req.requestingStaffName}
                             </Typography>
-                          </Box>
-                        )}
+                            <Typography>
+                              <strong>Location:</strong>{" "}
+                              {req.shiftInfo?.location?.name}
+                            </Typography>
+                          </Grid>
+                          <Grid item xs={12} sm={6}>
+                            <Typography>
+                              <strong>Date:</strong>{" "}
+                              {new Date(
+                                req.shiftInfo?.startTime,
+                              ).toLocaleDateString()}
+                            </Typography>
+                            <Typography>
+                              <strong>Time:</strong>{" "}
+                              {new Date(
+                                req.shiftInfo?.startTime,
+                              ).toLocaleTimeString()}
+                            </Typography>
+                          </Grid>
+                          {req.type === "swap" && (
+                            <Grid item xs={12}>
+                              <Typography>
+                                <strong>Target Staff:</strong>{" "}
+                                {req.targetStaffName}
+                              </Typography>
+                            </Grid>
+                          )}
+                        </Grid>
 
                         {/* Notes */}
                         {req.notes && (
@@ -1711,29 +1514,16 @@ const SwapRequests = () => {
                               bgcolor: "#fff3e0",
                               p: 1.5,
                               borderRadius: 1,
-                              borderLeft: "4px solid #ff9800",
-                              mb: 2,
+                              mt: 2,
                             }}
                           >
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 0.5,
-                              }}
-                            >
-                              <NoteIcon fontSize="small" color="warning" />{" "}
-                              Notes
-                            </Typography>
-                            <Typography variant="body2">
-                              "{req.notes}"
+                            <Typography variant="caption">
+                              Note: "{req.notes}"
                             </Typography>
                           </Box>
                         )}
 
-                        {/* Action Buttons */}
+                        {/* Action Buttons - Always show for managers */}
                         <Box
                           display="flex"
                           gap={1}
@@ -1741,26 +1531,18 @@ const SwapRequests = () => {
                           mt={2}
                         >
                           <Button
-                            size="small"
                             variant="outlined"
                             color="error"
                             startIcon={<RejectIcon />}
-                            onClick={() =>
-                              handleRejectRequest(req, req.shiftInfo)
-                            }
-                            sx={{ borderRadius: 2 }}
+                            onClick={() => handleRejectRequest(req._id)}
                           >
                             Reject
                           </Button>
                           <Button
-                            size="small"
                             variant="contained"
                             color="success"
                             startIcon={<ApproveIcon />}
-                            onClick={() =>
-                              handleApproveRequest(req, req.shiftInfo)
-                            }
-                            sx={{ borderRadius: 2 }}
+                            onClick={() => handleApproveRequest(req._id)}
                           >
                             Approve
                           </Button>
@@ -1768,24 +1550,17 @@ const SwapRequests = () => {
                       </CardContent>
                     </Card>
                   </Grid>
-                ))}
-              </Grid>
-            ) : (
-              <Paper sx={{ p: 4, textAlign: "center", bgcolor: "#f5f5f5" }}>
-                <CheckCircleIcon
-                  sx={{ fontSize: 60, color: "#4caf50", mb: 2 }}
-                />
-                <Typography variant="h6" gutterBottom>
-                  All Caught Up!
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  No pending approvals at the moment. Check back later.
-                </Typography>
-              </Paper>
-            )}
+                ))
+              ) : (
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 4, textAlign: "center" }}>
+                    <Typography>No pending approvals</Typography>
+                  </Paper>
+                </Grid>
+              )}
+            </Grid>
           </Box>
         )}
-
         {/* Swap Request Dialog */}
         <Dialog
           open={openSwapDialog}

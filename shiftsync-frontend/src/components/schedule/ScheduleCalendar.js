@@ -63,7 +63,7 @@ const ScheduleCalendar = () => {
     fetchLocations();
     fetchStaff();
     fetchShifts();
-  }, [fetchLocations, fetchStaff, fetchShifts]);
+  }, []);
 
   const fetchLocations = async () => {
     try {

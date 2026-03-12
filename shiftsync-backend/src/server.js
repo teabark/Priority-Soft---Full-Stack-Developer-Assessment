@@ -12,9 +12,20 @@ const { errorHandler } = require('./middleware/errorHandler');
 connectDB();
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL, // https://priority-soft-full-stack-developer.onrender.com
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
 }));
+
+// SIMPLE TEST ENDPOINT - NO AUTH, NO DATABASE
+app.get('/api/ping', (req, res) => {
+  console.log('📡 Ping received from:', req.headers.origin);
+  res.json({ 
+    message: 'pong', 
+    time: new Date().toISOString(),
+    origin: req.headers.origin 
+  });
+});
+
 
 // Create HTTP server
 const server = http.createServer(app);
